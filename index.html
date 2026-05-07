@@ -1,137 +1,155 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <title>桌台计时系统</title>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    h1 { text-align: center; }
-    .card { border: 1px solid #ccc; padding: 20px; margin: 20px auto; max-width: 500px; border-radius: 8px; }
-    .btn { padding: 10px 15px; margin: 5px; cursor: pointer; border: none; border-radius: 5px; }
-    .add-btn { background-color: orange; color: #fff; }
-    .back-btn { background-color: #666; color: #fff; }
-    .start { background-color: green; color: #fff; }
-    .pause { background-color: red; color: #fff; }
-    input { width: 100%; padding: 8px; margin: 5px 0; }
-    textarea { width: 100%; padding: 8px; margin: 5px 0; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>桌台计时系统</title>
+<style>
+body { font-family: Arial, sans-serif; background:#f9f9f9; margin:0; padding:0;}
+h1 { text-align:center; margin-top:20px;}
+#tables { display:flex; flex-wrap:wrap; justify-content:center; padding:20px;}
+.card { background:#fff; border:1px solid #ddd; border-radius:8px; width:200px; margin:10px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
+.card h2 { margin:0 0 10px 0; font-size:18px; }
+.card p { margin:5px 0; font-size:16px; }
+button { margin:5px 2px; padding:6px 10px; font-size:14px; border:none; border-radius:5px; cursor:pointer; }
+.start-btn{background:#4CAF50; color:#fff;}
+.pause-btn{background:#FF9800; color:#fff;}
+.reset-btn{background:#f44336; color:#fff;}
+.custom-btn{background:#2196F3; color:#fff;}
+#detail { max-width:500px; margin:20px auto; background:#fff; padding:20px; border-radius:8px; border:1px solid #ddd; box-shadow:0 2px 5px rgba(0,0,0,0.1); display:none;}
+#detail h2{ text-align:center; }
+#customTime { width:60px; }
+</style>
 </head>
 <body>
 
 <h1>桌台计时系统</h1>
-<div id="tablesList"></div>
-<div id="tableDetail"></div>
+<div id="tables"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<div id="detail">
+  <h2 id="detailTitle">桌台详情</h2>
+  <p>计时: <span id="timeDisplay">00:00:00</span></p>
+  <button class="start-btn" onclick="startTimer()">开始</button>
+  <button class="pause-btn" onclick="pauseTimer()">暂停</button>
+  <button class="reset-btn" onclick="resetTimer()">重置</button>
+  <input type="number" id="customTime" placeholder="秒">
+  <button class="custom-btn" onclick="startCustomCountdown()">倒计时</button>
+  <button onclick="backHome()">返回</button>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.1.0/firebase-database.js"></script>
 <script>
-  let tables = JSON.parse(localStorage.getItem('tables')) || [];
-  let currentTableId = new URLSearchParams(window.location.search).get('tableId');
+// ===== Firebase 配置 =====
+const firebaseConfig = {
+  apiKey: "你的API_KEY",
+  authDomain: "你的项目.firebaseapp.com",
+  databaseURL: "https://你的项目-default-rtdb.firebaseio.com",
+  projectId: "你的项目ID",
+  storageBucket: "你的项目.appspot.com",
+  messagingSenderId: "消息ID",
+  appId: "appID"
+};
+const app = firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-  function saveTables() {
-    localStorage.setItem('tables', JSON.stringify(tables));
-  }
+// ===== 数据和状态 =====
+let tables = {}; // 本地缓存桌台数据
+let currentTableId = null;
+let timerInterval = null;
 
-  function renderTables() {
-    const el = document.getElementById('tablesList');
-    el.innerHTML = '';
-    tables.forEach(t => {
-      const div = document.createElement('div');
-      div.className = 'card';
-      div.innerHTML = `
-        <h3>${t.name}</h3>
-        <button class="add-btn" onclick="viewTable('${t.id}')">查看桌台</button>
-      `;
-      el.appendChild(div);
-    });
-    const addBtn = document.createElement('button');
-    addBtn.className = 'add-btn';
-    addBtn.textContent = '新建桌台';
-    addBtn.onclick = addTable;
-    el.appendChild(addBtn);
-  }
-
-  function addTable() {
-    const name = prompt('请输入桌台名称');
-    if (!name) return;
-    const id = Date.now().toString();
-    const table = { id, name, remark: '', startTime: null, elapsed: 0 };
-    tables.push(table);
-    saveTables();
+// ===== 初始化桌台 =====
+function loadTables() {
+  db.ref('tables').on('value', snapshot=>{
+    tables = snapshot.val() || {};
     renderTables();
-  }
-
-  function viewTable(id) {
-    const table = tables.find(t => t.id === id);
-    if (!table) { alert('桌台不存在'); return; }
-    currentTableId = id;
-    renderDetail(table);
-  }
-
-  function renderDetail(table) {
-    const el = document.getElementById('tableDetail');
-    el.innerHTML = `
-      <div class="card">
-        <h2>${table.name}</h2>
-        <p>备注：<textarea id="remark">${table.remark}</textarea></p>
-        <p>计时：<span id="timer">${table.elapsed}</span> 秒</p>
-        <button class="start" onclick="startTimer()">开始</button>
-        <button class="pause" onclick="pauseTimer()">暂停</button>
-        <button class="back-btn" onclick="backHome()">返回</button>
-        <p>桌台二维码：</p>
-        <div id="qrcode"></div>
-      </div>
-    `;
-    QRCode.toCanvas(document.getElementById('qrcode'), `${window.location.origin}${window.location.pathname}?tableId=${table.id}`, function (error) {
-      if (error) console.error(error);
-    });
-  }
-
-  let timerInterval = null;
-  function startTimer() {
-    const table = tables.find(t => t.id === currentTableId);
-    if (!table) return;
-    if (timerInterval) return; // 已经在计时
-    table.startTime = Date.now() - table.elapsed * 1000;
-    timerInterval = setInterval(() => {
-      table.elapsed = Math.floor((Date.now() - table.startTime) / 1000);
-      document.getElementById('timer').textContent = table.elapsed;
-      saveTables();
-    }, 1000);
-  }
-
-  function pauseTimer() {
-    const table = tables.find(t => t.id === currentTableId);
-    if (!table) return;
-    clearInterval(timerInterval);
-    timerInterval = null;
-    table.elapsed = Math.floor((Date.now() - table.startTime) / 1000);
-    table.startTime = null;
-    saveTables();
-  }
-
-  function backHome() {
-    currentTableId = null;
-    document.getElementById('tableDetail').innerHTML = '';
-    renderTables();
-  }
-
-  // 页面加载时
-  if (currentTableId) {
-    const table = tables.find(t => t.id === currentTableId);
-    if (table) renderDetail(table);
-    else alert('桌台不存在');
-  } else {
-    renderTables();
-  }
-
-  // 保存备注
-  document.addEventListener('input', (e) => {
-    if (!currentTableId) return;
-    const table = tables.find(t => t.id === currentTableId);
-    if (!table) return;
-    if (e.target.id === 'remark') table.remark = e.target.value;
-    saveTables();
+    if(currentTableId) renderDetail(currentTableId);
   });
+}
+
+function renderTables() {
+  const container = document.getElementById('tables');
+  container.innerHTML = '';
+  Object.keys(tables).forEach(id=>{
+    const t = tables[id];
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<h2>${t.name}</h2>
+                      <p>计时: ${formatTime(t.seconds || 0)}</p>
+                      <button onclick="openDetail('${id}')">详情</button>`;
+    container.appendChild(card);
+  });
+}
+
+function openDetail(id){
+  currentTableId = id;
+  document.getElementById('tables').style.display='none';
+  document.getElementById('detail').style.display='block';
+  renderDetail(id);
+}
+
+function backHome(){
+  currentTableId = null;
+  document.getElementById('tables').style.display='flex';
+  document.getElementById('detail').style.display='none';
+  if(timerInterval) clearInterval(timerInterval);
+}
+
+// ===== 详情页 =====
+function renderDetail(id){
+  const t = tables[id];
+  document.getElementById('detailTitle').innerText = t.name;
+  document.getElementById('timeDisplay').innerText = formatTime(t.seconds || 0);
+}
+
+// ===== 计时功能 =====
+function startTimer(){
+  if(!currentTableId) return;
+  if(timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(()=>{
+    const t = tables[currentTableId];
+    const newSeconds = (t.seconds || 0) + 1;
+    db.ref('tables/'+currentTableId+'/seconds').set(newSeconds);
+  }, 1000);
+}
+
+function pauseTimer(){
+  if(timerInterval) clearInterval(timerInterval);
+}
+
+function resetTimer(){
+  if(!currentTableId) return;
+  if(timerInterval) clearInterval(timerInterval);
+  db.ref('tables/'+currentTableId+'/seconds').set(0);
+}
+
+function startCustomCountdown(){
+  if(!currentTableId) return;
+  let customSec = parseInt(document.getElementById('customTime').value);
+  if(isNaN(customSec) || customSec <= 0) return alert('请输入有效秒数');
+  if(timerInterval) clearInterval(timerInterval);
+  db.ref('tables/'+currentTableId+'/seconds').set(customSec);
+  timerInterval = setInterval(()=>{
+    const t = tables[currentTableId];
+    if(t.seconds <= 0){
+      clearInterval(timerInterval);
+      return;
+    }
+    db.ref('tables/'+currentTableId+'/seconds').set(t.seconds - 1);
+  },1000);
+}
+
+// ===== 格式化时间 =====
+function formatTime(sec){
+  let h=Math.floor(sec/3600);
+  let m=Math.floor((sec%3600)/60);
+  let s=sec%60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// ===== 启动 =====
+loadTables();
 </script>
 </body>
 </html>
