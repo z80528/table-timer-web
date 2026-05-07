@@ -24,6 +24,7 @@ button{border:none;padding:12px 16px;border-radius:12px;cursor:pointer;color:whi
 .reset{background:#2196f3;}
 .delete{background:red;}
 .countdown-btn{background:#9c27b0;}
+.save-btn{background:#ff9800;}
 .back-btn{background:#666;margin-bottom:20px;}
 textarea{width:100%;min-height:100px;border-radius:12px;border:1px solid #ddd;padding:12px;box-sizing:border-box;resize:none;font-size:14px;margin-top:20px;}
 input{width:100%;box-sizing:border-box;}
@@ -98,11 +99,9 @@ function renderUI(){
       let seconds = t.totalTime||0;
       if(t.status==="使用中"&&t.startTime) seconds += Math.floor((Date.now()-t.startTime)/1000);
       else if(t.status==="倒计时中"&&t.countdownEnd) seconds = Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000));
-      el.innerHTML = `
-        <h2>${t.name}</h2>
-        <div class="time">${formatTime(seconds)}</div>
-        <div class="remark">${t.remark || '暂无备注'}</div>
-      `;
+      el.innerHTML = `<h2>${t.name}</h2>
+                      <div class="time">${formatTime(seconds)}</div>
+                      <div class="remark">${t.remark || '暂无备注'}</div>`;
     });
     return;
   }
@@ -114,14 +113,16 @@ function renderUI(){
 
   const t = tables.find(x=>x.id==window.currentTableId);
   if(!t) return;
+
   if(!document.getElementById('detail-container')){
     el.innerHTML=`<div class="card" style="max-width:500px;margin:40px auto;" id="detail-container">
       <button class="back-btn" onclick="window.currentTableId=null;renderUI()">← 返回</button>
-      <input value="${t.name}" onchange="t.name=this.value;saveTable(t);" id="detail-name" style="border:none;font-size:32px;font-weight:bold;text-align:center;margin-bottom:20px;outline:none;background:none;"/>
+      <input value="${t.name}" id="detail-name" style="border:none;font-size:32px;font-weight:bold;text-align:center;margin-bottom:20px;outline:none;background:none;"/>
       <div class="status ${t.status==='使用中'?'running':t.status==='暂停中'?'pause':t.status==='倒计时中'?'countdown':'unused'}" style="display:block;width:fit-content;margin:20px auto;" id="detail-status">${t.status}</div>
       <div class="time" id="detail-time">${t.status==='倒计时中'?formatTime(Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000))):formatTime(getCurrentSeconds(t))}</div>
-      <textarea placeholder="请输入备注..." oninput="t.remark=this.value;saveTable(t);" id="detail-remark">${t.remark||''}</textarea>
+      <textarea id="detail-remark" placeholder="请输入备注...">${t.remark||''}</textarea>
       <div class="btns">
+        <button class="save-btn" onclick="saveDetail()">💾 保存修改</button>
         <button class="start" onclick="startTable('${t.id}')">开始</button>
         <button class="countdown-btn" onclick="countdownStart('${t.id}')">倒计时开始</button>
         <button class="pause-btn" onclick="pauseTable('${t.id}')">暂停</button>
@@ -133,16 +134,14 @@ function renderUI(){
     const qrDiv=document.getElementById(`qrcode-${t.id}`);
     qrDiv.innerHTML='';
     new QRCode(qrDiv,{text:`${window.location.href}?tableId=${t.id}`,width:100,height:100});
-  } else {
-    const timeEl = document.getElementById('detail-time');
-    const statusEl = document.getElementById('detail-status');
-    if(timeEl){
-      let seconds = t.totalTime||0;
-      if(t.status==="使用中"&&t.startTime) seconds += Math.floor((Date.now()-t.startTime)/1000);
-      else if(t.status==="倒计时中"&&t.countdownEnd) seconds = Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000));
-      timeEl.innerText = formatTime(seconds);
-    }
-    if(statusEl) statusEl.innerText = t.status;
+  }
+
+  // 保存按钮逻辑
+  window.saveDetail = function(){
+    t.name = document.getElementById('detail-name').value;
+    t.remark = document.getElementById('detail-remark').value;
+    saveTable(t);
+    alert('已保存修改，顾客端扫码即可看到更新内容');
   }
 }
 
