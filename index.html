@@ -91,8 +91,18 @@ function saveTable(table){
 
 // 桌台操作
 function addTable(){
-  const id = Date.now().toString();
-  const table = {id,name:'桌台 '+id,status:'未使用',totalTime:0,startTime:null,countdownEnd:null,remark:''};
+  const id = Date.now().toString(); // Firebase 唯一 ID
+  const displayNumber = tables.length + 1; // 显示编号从1开始
+  const table = {
+    id: id,
+    displayNumber: displayNumber,
+    name: '桌台 ' + displayNumber,
+    status: '未使用',
+    totalTime: 0,
+    startTime: null,
+    countdownEnd: null,
+    remark: ''
+  };
   saveTable(table);
 }
 function startTable(id){ const t=tables.find(x=>x.id==id); if(!t||t.status==='使用中') return; t.status='使用中'; t.startTime=Date.now(); saveTable(t);}
@@ -105,7 +115,6 @@ function deleteTable(id){ if(!confirm('确定删除该桌台吗？')) return; co
 function renderUI(){
   const el = document.getElementById('tables');
   if(isCustomerView){
-    // 只绑定一次
     if(!window.customerListenerBound){
       window.customerListenerBound = true;
       const tRef = ref(db,'tables/'+tableIdParam);
@@ -158,7 +167,6 @@ function renderUI(){
     new QRCode(qrDiv,{text:`${window.location.href}?tableId=${t.id}`,width:100,height:100});
   }
 
-  // 保存按钮逻辑
   window.saveDetail = function(){
     t.name = document.getElementById('detail-name').value;
     t.remark = document.getElementById('detail-remark').value;
@@ -166,7 +174,6 @@ function renderUI(){
     alert('已保存修改，顾客端扫码即可看到更新内容');
   }
 
-  // 每秒更新时间
   const timeEl = document.getElementById('detail-time');
   const statusEl = document.getElementById('detail-status');
   if(timeEl){
@@ -189,7 +196,6 @@ setInterval(()=>{
   else renderUI();
 },1000);
 
-// 全局函数
 window.addTable=addTable;
 window.startTable=startTable;
 window.countdownStart=countdownStart;
