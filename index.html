@@ -52,7 +52,7 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 // 状态
-window.currentTableId = null; // 绑定全局
+window.currentTableId = null;
 let tables = [];
 const tableIdParam = new URLSearchParams(window.location.search).get('tableId');
 const isCustomerView = tableIdParam !== null;
@@ -102,24 +102,39 @@ function renderUI(){
   }
   const t = tables.find(x=>x.id==window.currentTableId);
   if(!t) return;
-  el.innerHTML=`<div class="card" style="max-width:500px;margin:40px auto;">
-    <button class="back-btn" onclick="window.currentTableId=null;renderUI()">← 返回</button>
-    <input value="${t.name}" onchange="t.name=this.value;saveTable(t);" style="border:none;font-size:32px;font-weight:bold;text-align:center;margin-bottom:20px;outline:none;background:none;"/>
-    <div class="status ${t.status==='使用中'?'running':t.status==='暂停中'?'pause':t.status==='倒计时中'?'countdown':'unused'}" style="display:block;width:fit-content;margin:20px auto;">${t.status}</div>
-    <div class="time" id="detail-time">${t.status==='倒计时中'?formatTime(Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000))):formatTime(getCurrentSeconds(t))}</div>
-    <textarea placeholder="请输入备注..." oninput="t.remark=this.value;saveTable(t);">${t.remark||''}</textarea>
-    <div class="btns">
-      <button class="start" onclick="startTable('${t.id}')">开始</button>
-      <button class="countdown-btn" onclick="countdownStart('${t.id}')">倒计时开始</button>
-      <button class="pause-btn" onclick="pauseTable('${t.id}')">暂停</button>
-      <button class="reset" onclick="resetTable('${t.id}')">重置</button>
-      <button class="delete" onclick="deleteTable('${t.id}')">删除</button>
-    </div>
-    <div id="qrcode-${t.id}"></div>
-  </div>`;
-  const qrDiv=document.getElementById(`qrcode-${t.id}`);
-  qrDiv.innerHTML='';
-  new QRCode(qrDiv,{text:`${window.location.href}?tableId=${t.id}`,width:100,height:100});
+  // 详情页只渲染一次，textarea和input不会被每秒刷新覆盖
+  if(!document.getElementById('detail-container')){
+    el.innerHTML=`<div class="card" style="max-width:500px;margin:40px auto;" id="detail-container">
+      <button class="back-btn" onclick="window.currentTableId=null;renderUI()">← 返回</button>
+      <input value="${t.name}" onchange="t.name=this.value;saveTable(t);" id="detail-name" style="border:none;font-size:32px;font-weight:bold;text-align:center;margin-bottom:20px;outline:none;background:none;"/>
+      <div class="status ${t.status==='使用中'?'running':t.status==='暂停中'?'pause':t.status==='倒计时中'?'countdown':'unused'}" style="display:block;width:fit-content;margin:20px auto;" id="detail-status">${t.status}</div>
+      <div class="time" id="detail-time">${t.status==='倒计时中'?formatTime(Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000))):formatTime(getCurrentSeconds(t))}</div>
+      <textarea placeholder="请输入备注..." oninput="t.remark=this.value;saveTable(t);" id="detail-remark">${t.remark||''}</textarea>
+      <div class="btns">
+        <button class="start" onclick="startTable('${t.id}')">开始</button>
+        <button class="countdown-btn" onclick="countdownStart('${t.id}')">倒计时开始</button>
+        <button class="pause-btn" onclick="pauseTable('${t.id}')">暂停</button>
+        <button class="reset" onclick="resetTable('${t.id}')">重置</button>
+        <button class="delete" onclick="deleteTable('${t.id}')">删除</button>
+      </div>
+      <div id="qrcode-${t.id}"></div>
+    </div>`;
+    const qrDiv=document.getElementById(`qrcode-${t.id}`);
+    qrDiv.innerHTML='';
+    new QRCode(qrDiv,{text:`${window.location.href}?tableId=${t.id}`,width:100,height:100});
+  } else {
+    // 每秒只更新计时器和状态，不覆盖 textarea/input
+    const timeEl = document.getElementById('detail-time');
+    const statusEl = document.getElementById('detail-status');
+    if(timeEl){
+      if(t.status==='倒计时中' && t.countdownEnd){
+        timeEl.innerText = formatTime(Math.max(0,Math.floor((t.countdownEnd - Date.now())/1000)));
+      } else {
+        timeEl.innerText = formatTime(getCurrentSeconds(t));
+      }
+    }
+    if(statusEl) statusEl.innerText = t.status;
+  }
 }
 
 // 实时刷新
@@ -129,7 +144,8 @@ setInterval(()=>{
       if(Date.now()>=t.countdownEnd){ t.status='使用中'; t.startTime=Date.now(); t.countdownEnd=null; saveTable(t);}
     }
   });
-  renderUI();
+  if(!window.currentTableId) renderUI();
+  else renderUI(); // 详情页只更新时间和状态，不重绘textarea/input
 },1000);
 
 // 全局函数
