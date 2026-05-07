@@ -58,9 +58,22 @@ let tables = [];
 const tableIdParam = new URLSearchParams(window.location.search).get('tableId');
 const isCustomerView = tableIdParam !== null;
 
-// 辅助函数
-function formatTime(sec){const h=String(Math.floor(sec/3600)).padStart(2,'0');const m=String(Math.floor(sec%3600/60)).padStart(2,'0');const s=String(sec%60).padStart(2,'0');return `${h}:${m}:${s}`;}
-function getCurrentSeconds(table){let total=table.totalTime||0;if(table.status==="使用中"&&table.startTime){total+=Math.floor((Date.now()-table.startTime)/1000);} return total;}
+// 格式化时间
+function formatTime(sec){
+  const h=String(Math.floor(sec/3600)).padStart(2,'0');
+  const m=String(Math.floor(sec%3600/60)).padStart(2,'0');
+  const s=String(sec%60).padStart(2,'0');
+  return `${h}:${m}:${s}`;
+}
+
+// 计算当前秒数
+function getCurrentSeconds(table){
+  let total = table.totalTime||0;
+  if(table.status==="使用中" && table.startTime){
+    total += Math.floor((Date.now()-table.startTime)/1000);
+  }
+  return total;
+}
 
 // Firebase
 function loadTables(){
@@ -92,22 +105,31 @@ function deleteTable(id){ if(!confirm('确定删除该桌台吗？')) return; co
 function renderUI(){
   const el = document.getElementById('tables');
   if(isCustomerView){
-    const tRef = ref(db,'tables/'+tableIdParam);
-    onValue(tRef, snapshot => {
-      const t = snapshot.val();
-      if(!t){ el.innerHTML='<p>桌台不存在</p>'; return;}
-      let seconds = t.totalTime||0;
-      if(t.status==="使用中"&&t.startTime) seconds += Math.floor((Date.now()-t.startTime)/1000);
-      else if(t.status==="倒计时中"&&t.countdownEnd) seconds = Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000));
-      el.innerHTML = `<h2>${t.name}</h2>
-                      <div class="time">${formatTime(seconds)}</div>
-                      <div class="remark">${t.remark || '暂无备注'}</div>`;
-    });
+    // 只绑定一次
+    if(!window.customerListenerBound){
+      window.customerListenerBound = true;
+      const tRef = ref(db,'tables/'+tableIdParam);
+      onValue(tRef, snapshot => {
+        const t = snapshot.val();
+        if(!t){ el.innerHTML='<p>桌台不存在</p>'; return; }
+        let seconds = t.totalTime||0;
+        if(t.status==="使用中" && t.startTime) seconds += Math.floor((Date.now()-t.startTime)/1000);
+        else if(t.status==="倒计时中" && t.countdownEnd) seconds = Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000));
+        el.innerHTML = `<h2>${t.name}</h2>
+                        <div class="time">${formatTime(seconds)}</div>
+                        <div class="remark">${t.remark||'暂无备注'}</div>`;
+      });
+    }
     return;
   }
 
   if(!window.currentTableId){
-    el.innerHTML=`<div class="top"><h1>桌台计时系统</h1><button class="add-btn" onclick="addTable()">+ 新增桌台</button></div><div class="tables">${tables.map(t=>`<div class="card" onclick="window.currentTableId='${t.id}';renderUI();"><h2>${t.name}</h2><div class="status ${t.status==='使用中'?'running':t.status==='暂停中'?'pause':t.status==='倒计时中'?'countdown':'unused'}">${t.status}</div><div class="time">${t.status==='倒计时中'?formatTime(Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000))):formatTime(getCurrentSeconds(t))}</div></div>`).join('')}</div>`;
+    el.innerHTML=`<div class="top"><h1>桌台计时系统</h1><button class="add-btn" onclick="addTable()">+ 新增桌台</button></div>
+      <div class="tables">${tables.map(t=>`<div class="card" onclick="window.currentTableId='${t.id}';renderUI();">
+        <h2>${t.name}</h2>
+        <div class="status ${t.status==='使用中'?'running':t.status==='暂停中'?'pause':t.status==='倒计时中'?'countdown':'unused'}">${t.status}</div>
+        <div class="time">${t.status==='倒计时中'?formatTime(Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000))):formatTime(getCurrentSeconds(t))}</div>
+      </div>`).join('')}</div>`;
     return;
   }
 
@@ -117,7 +139,7 @@ function renderUI(){
   if(!document.getElementById('detail-container')){
     el.innerHTML=`<div class="card" style="max-width:500px;margin:40px auto;" id="detail-container">
       <button class="back-btn" onclick="window.currentTableId=null;renderUI()">← 返回</button>
-      <input value="${t.name}" id="detail-name" style="border:none;font-size:32px;font-weight:bold;text-align:center;margin-bottom:20px;outline:none;background:none;"/>
+      <input id="detail-name" value="${t.name}" style="border:none;font-size:32px;font-weight:bold;text-align:center;margin-bottom:20px;outline:none;background:none;"/>
       <div class="status ${t.status==='使用中'?'running':t.status==='暂停中'?'pause':t.status==='倒计时中'?'countdown':'unused'}" style="display:block;width:fit-content;margin:20px auto;" id="detail-status">${t.status}</div>
       <div class="time" id="detail-time">${t.status==='倒计时中'?formatTime(Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000))):formatTime(getCurrentSeconds(t))}</div>
       <textarea id="detail-remark" placeholder="请输入备注...">${t.remark||''}</textarea>
@@ -143,9 +165,20 @@ function renderUI(){
     saveTable(t);
     alert('已保存修改，顾客端扫码即可看到更新内容');
   }
+
+  // 每秒更新时间
+  const timeEl = document.getElementById('detail-time');
+  const statusEl = document.getElementById('detail-status');
+  if(timeEl){
+    let seconds = t.totalTime||0;
+    if(t.status==="使用中" && t.startTime) seconds += Math.floor((Date.now()-t.startTime)/1000);
+    else if(t.status==="倒计时中" && t.countdownEnd) seconds = Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000));
+    timeEl.innerText = formatTime(seconds);
+  }
+  if(statusEl) statusEl.innerText = t.status;
 }
 
-// 实时刷新
+// 实时刷新计时
 setInterval(()=>{
   tables.forEach(t=>{
     if(t.status==='倒计时中' && t.countdownEnd){
