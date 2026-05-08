@@ -40,7 +40,6 @@ ul{padding-left:20px;}
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
 
-// Firebase 配置
 const firebaseConfig = {
   apiKey: "AIzaSyCkdd-_Bc8dE4sOnM8PGpTk1YEKiNFkerc",
   authDomain: "table-timer-1.firebaseapp.com",
@@ -53,15 +52,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-// 全局状态
 window.currentTableId = null;
 let tables = [];
 let nextId = 1;
-const storeId = new URLSearchParams(window.location.search).get('storeId'); // 每家店独立 storeId
+const storeId = new URLSearchParams(window.location.search).get('storeId');
 const tableIdParam = new URLSearchParams(window.location.search).get('tableId');
 const isCustomerView = tableIdParam !== null;
 
-// 时间格式化
 function formatTime(sec){
   const h=String(Math.floor(sec/3600)).padStart(2,'0');
   const m=String(Math.floor(sec%3600/60)).padStart(2,'0');
@@ -76,7 +73,6 @@ function getCurrentSeconds(table){
   return total;
 }
 
-// Firebase 读取店铺桌台
 function loadTables(){
   if(!storeId){ alert('请带 storeId 参数访问网页'); return;}
   const tRef = ref(db,'tables/'+storeId);
@@ -90,14 +86,11 @@ function loadTables(){
     renderUI();
   });
 }
-
-// 保存桌台
 function saveTable(table){
   const tRef = ref(db,'tables/'+storeId+'/'+table.id);
   set(tRef,table);
 }
 
-// 桌台操作
 function addTable(){
   const id = Date.now().toString();
   const table = {
@@ -154,7 +147,6 @@ function resetTable(id){
 
 function deleteTable(id){ if(!confirm('确定删除该桌台吗？')) return; const tRef=ref(db,'tables/'+storeId+'/'+id); set(tRef,null);}
 
-// 渲染
 function renderUI(){
   const el = document.getElementById('tables');
   if(isCustomerView){
@@ -211,9 +203,13 @@ function renderUI(){
       </div>
       <div id="qrcode-${t.id}"></div>
     </div>`;
-    const qrDiv=document.getElementById(`qrcode-${t.id}`);
+    const qrDiv = document.getElementById(`qrcode-${t.id}`);
     qrDiv.innerHTML='';
-    new QRCode(qrDiv,{text:`${window.location.href}?storeId=${storeId}&tableId=${t.id}`,width:100,height:100});
+    new QRCode(qrDiv,{
+      text:`${window.location.origin + window.location.pathname}?storeId=${storeId}&tableId=${t.id}`,
+      width:100,
+      height:100
+    });
   }
 
   window.saveDetail = function(){
