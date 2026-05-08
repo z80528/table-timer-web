@@ -40,7 +40,6 @@ ul{padding-left:20px;}
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
 
-// Firebase 配置
 const firebaseConfig = {
   apiKey: "AIzaSyCkdd-_Bc8dE4sOnM8PGpTk1YEKiNFkerc",
   authDomain: "table-timer-1.firebaseapp.com",
@@ -114,12 +113,25 @@ function startTable(id){
   t.status='使用中';
   t.startTime=Date.now();
   if(!t.startRecords) t.startRecords=[];
-  t.startRecords.push(t.startTime);
+  t.startRecords.push({type:"start",time:t.startTime});
   saveTable(t);
 }
 
 function countdownStart(id){ const input=prompt('请输入倒计时分钟数'); if(!input) return; const minutes=Number(input); if(isNaN(minutes)||minutes<=0){alert('请输入正确分钟数');return;} const t=tables.find(x=>x.id==id); if(!t) return; t.status='倒计时中'; t.countdownEnd=Date.now()+minutes*60*1000; saveTable(t);}
-function pauseTable(id){ const t=tables.find(x=>x.id==id); if(!t) return; if(!confirm('确定暂停当前桌台计时吗？')) return; t.totalTime=getCurrentSeconds(t); t.startTime=null; t.countdownEnd=null; t.status='暂停中'; saveTable(t);}
+
+function pauseTable(id){
+  const t = tables.find(x=>x.id==id);
+  if(!t) return;
+  if(!confirm('确定暂停当前桌台计时吗？')) return;
+  t.totalTime=getCurrentSeconds(t);
+  t.startTime=null;
+  t.countdownEnd=null;
+  t.status='暂停中';
+  if(!t.startRecords) t.startRecords=[];
+  t.startRecords.push({type:"pause",time:Date.now()}); // ✅ 记录暂停
+  saveTable(t);
+}
+
 function resetTable(id){ 
   const t = tables.find(x=>x.id==id);
   if(!t) return;
@@ -128,9 +140,10 @@ function resetTable(id){
   t.startTime=null;
   t.countdownEnd=null;
   t.status='未使用';
-  t.startRecords=[]; // ✅ 清空开始记录
+  t.startRecords=[]; // ✅ 清空所有记录
   saveTable(t);
 }
+
 function deleteTable(id){ if(!confirm('确定删除该桌台吗？')) return; const tRef=ref(db,'tables/'+id); set(tRef,null);}
 
 function renderUI(){
@@ -182,9 +195,9 @@ function renderUI(){
         <button class="delete" onclick="deleteTable('${t.id}')">删除</button>
       </div>
       <div id="start-records">
-        <h3>开始计时记录：</h3>
+        <h3>开始/暂停记录：</h3>
         <ul>
-          ${t.startRecords && t.startRecords.length>0 ? t.startRecords.map(ts=>`<li>${new Date(ts).toLocaleString()}</li>`).join('') : '<li>暂无记录</li>'}
+          ${t.startRecords && t.startRecords.length>0 ? t.startRecords.map(r=>`<li>${r.type==='start'?'开始':'暂停'}: ${new Date(r.time).toLocaleString()}</li>`).join('') : '<li>暂无记录</li>'}
         </ul>
       </div>
       <div id="qrcode-${t.id}"></div>
