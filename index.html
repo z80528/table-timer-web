@@ -67,7 +67,7 @@ function formatTime(sec){
 }
 
 function getCurrentSeconds(table){
-  let total = table.totalTime ? table.totalTime : 0;
+  let total = table.totalTime || 0;
   if(table.status==="使用中" && table.startTime){
     total += Math.floor((Date.now()-table.startTime)/1000);
   }
@@ -152,12 +152,14 @@ function deleteTable(id){ if(!confirm('确定删除该桌台吗？')) return; co
 // 二维码生成函数
 function generateQRCode(tableId){
   const qrDiv = document.getElementById('qrcode-container');
-  qrDiv.innerHTML='';
-  new QRCode(qrDiv,{
-    text:`${window.location.origin + window.location.pathname}?storeId=${storeId}&tableId=${tableId}`,
-    width:100,
-    height:100
-  });
+  if(!qrDiv) return;
+  if(qrDiv.children.length===0){ // 只生成一次
+    new QRCode(qrDiv,{
+      text:`${window.location.origin + window.location.pathname}?storeId=${storeId}&tableId=${tableId}`,
+      width:100,
+      height:100
+    });
+  }
 }
 
 function renderUI(){
@@ -169,12 +171,12 @@ function renderUI(){
       onValue(tRef, snapshot=>{
         const t = snapshot.val();
         if(!t){ el.innerHTML='<p>桌台不存在</p>'; return;}
-        let seconds = t.totalTime ? t.totalTime : 0;
+        let seconds = t.totalTime || 0;
         if(t.status==="使用中" && t.startTime) {
           seconds += Math.floor((Date.now()-t.startTime)/1000);
         } else if(t.status==="倒计时中" && t.countdownEnd){
           const remain = Math.floor((t.countdownEnd-Date.now())/1000);
-          seconds = remain > 0 ? remain : 0;
+          seconds = remain>0 ? remain : 0;
         }
         el.innerHTML=`<h2>${t.name}</h2>
           <div class="time">${formatTime(seconds)}</div>
@@ -197,6 +199,7 @@ function renderUI(){
   const t = tables.find(x=>x.id==window.currentTableId);
   if(!t) return;
 
+  // 渲染详情页 DOM
   el.innerHTML=`<div class="card" style="max-width:500px;margin:40px auto;" id="detail-container">
       <button class="back-btn" onclick="window.currentTableId=null;renderUI()">← 返回</button>
       <input id="detail-name" value="${t.name}" style="border:none;font-size:32px;font-weight:bold;text-align:center;margin-bottom:20px;outline:none;background:none;"/>
@@ -236,7 +239,26 @@ setInterval(()=>{
       if(Date.now()>=t.countdownEnd){ t.status='使用中'; t.startTime=Date.now(); t.countdownEnd=null; saveTable(t);}
     }
   });
-  renderUI();
+  // 只更新时间文本，DOM 不重建，防止二维码闪烁
+  if(window.currentTableId){
+    const t = tables.find(x=>x.id==window.currentTableId);
+    if(t){
+      const timeEl = document.getElementById('detail-time');
+      const statusEl = document.getElementById('detail-status');
+      if(timeEl){
+        let seconds = t.totalTime || 0;
+        if(t.status==="使用中" && t.startTime) seconds += Math.floor((Date.now()-t.startTime)/1000);
+        else if(t.status==="倒计时中" && t.countdownEnd){
+          const remain = Math.floor((t.countdownEnd-Date.now())/1000);
+          seconds = remain>0 ? remain : 0;
+        }
+        timeEl.innerText = formatTime(seconds);
+      }
+      if(statusEl) statusEl.innerText = t.status;
+    }
+  } else {
+    renderUI();
+  }
 },1000);
 
 window.addTable=addTable;
