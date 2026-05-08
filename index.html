@@ -78,15 +78,19 @@ function getCurrentSeconds(table){
   return total;
 }
 
-// Firebase 操作
+// 加载店铺
 function loadStores(){
   const sRef = ref(db,'stores');
   onValue(sRef, snapshot=>{
     stores = snapshot.val() ? Object.values(snapshot.val()) : [];
+    if(stores.length>0 && !stores.some(s => s.id === currentStoreId)){
+      currentStoreId = stores[0].id;
+    }
     renderUI();
   });
 }
 
+// 加载桌台
 function loadTables(){
   const tRef = ref(db,'tables/'+currentStoreId);
   onValue(tRef, snapshot=>{
@@ -96,6 +100,7 @@ function loadTables(){
   });
 }
 
+// 保存桌台
 function saveTable(table){
   set(ref(db,'tables/'+currentStoreId+'/'+table.id),table);
 }
@@ -135,7 +140,7 @@ function deleteTableUI(id){
   set(ref(db,'tables/'+currentStoreId+'/'+id),null);
 }
 
-// 渲染
+// 渲染 UI
 function renderUI(){
   const el = document.getElementById('tables');
   if(isCustomerView){
@@ -222,7 +227,6 @@ window.pauseTable=pauseTable;
 window.resetTable=resetTable;
 window.deleteTableUI=deleteTableUI;
 window.saveDetail=saveDetail;
-window.changeStore=changeStore;
 
 loadStores();
 loadTables();
