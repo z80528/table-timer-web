@@ -65,8 +65,9 @@ function formatTime(sec){
   const s=String(sec%60).padStart(2,'0');
   return `${h}:${m}:${s}`;
 }
+
 function getCurrentSeconds(table){
-  let total = table.totalTime||0;
+  let total = table.totalTime ? table.totalTime : 0;
   if(table.status==="使用中" && table.startTime){
     total += Math.floor((Date.now()-table.startTime)/1000);
   }
@@ -86,6 +87,7 @@ function loadTables(){
     renderUI();
   });
 }
+
 function saveTable(table){
   const tRef = ref(db,'tables/'+storeId+'/'+table.id);
   set(tRef,table);
@@ -156,9 +158,13 @@ function renderUI(){
       onValue(tRef, snapshot=>{
         const t = snapshot.val();
         if(!t){ el.innerHTML='<p>桌台不存在</p>'; return;}
-        let seconds = t.totalTime||0;
-        if(t.status==="使用中" && t.startTime) seconds += Math.floor((Date.now()-t.startTime)/1000);
-        else if(t.status==="倒计时中" && t.countdownEnd) seconds = Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000));
+        let seconds = t.totalTime ? t.totalTime : 0;
+        if(t.status==="使用中" && t.startTime) {
+          seconds += Math.floor((Date.now()-t.startTime)/1000);
+        } else if(t.status==="倒计时中" && t.countdownEnd){
+          const remain = Math.floor((t.countdownEnd-Date.now())/1000);
+          seconds = remain > 0 ? remain : 0;
+        }
         el.innerHTML=`<h2>${t.name}</h2>
           <div class="time">${formatTime(seconds)}</div>
           <div class="remark">${t.remark||'暂无备注'}</div>`;
@@ -224,7 +230,10 @@ function renderUI(){
   if(timeEl){
     let seconds=t.totalTime||0;
     if(t.status==="使用中" && t.startTime) seconds += Math.floor((Date.now()-t.startTime)/1000);
-    else if(t.status==="倒计时中" && t.countdownEnd) seconds = Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000));
+    else if(t.status==="倒计时中" && t.countdownEnd){
+      const remain = Math.floor((t.countdownEnd-Date.now())/1000);
+      seconds = remain>0 ? remain : 0;
+    }
     timeEl.innerText=formatTime(seconds);
   }
   if(statusEl) statusEl.innerText=t.status;
