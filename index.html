@@ -100,32 +100,35 @@ function saveTable(table){
   set(ref(db,'tables/'+currentStoreId+'/'+table.id),table);
 }
 
-function addStore(){
+// 新增店铺
+window.addStore = function(){
   const name = prompt('请输入店铺名称');
   if(!name) return;
   const id = 'store_'+Date.now();
   const store = {id,name};
-  set(ref(db,'stores/'+id),store);
+  set(ref(db,'stores/'+id),store)
+    .then(()=>{alert('店铺已创建！'); loadStores();})
+    .catch(err=>alert('创建失败: '+err));
 }
 
-function changeStore(){
+// 切换店铺
+window.changeStore = function(){
   const select = document.getElementById('storeSelect');
   currentStoreId = select.value;
   loadTables();
 }
 
+// 桌台操作
 function addTable(){
   const id = Date.now().toString();
   const displayNumber = tables.length + 1;
   const table = {id, displayNumber, name:'桌台 '+displayNumber,status:'未使用',totalTime:0,startTime:null,countdownEnd:null,remark:''};
   saveTable(table);
 }
-
 function startTable(id){ const t=tables.find(x=>x.id==id); if(!t||t.status==='使用中') return; t.status='使用中'; t.startTime=Date.now(); saveTable(t);}
 function countdownStart(id){ const input=prompt('请输入倒计时分钟数'); if(!input) return; const minutes=Number(input); if(isNaN(minutes)||minutes<=0){alert('请输入正确分钟数');return;} const t=tables.find(x=>x.id==id); if(!t) return; t.status='倒计时中'; t.countdownEnd=Date.now()+minutes*60*1000; saveTable(t);}
 function pauseTable(id){ const t=tables.find(x=>x.id==id); if(!t) return; if(!confirm('确定暂停当前桌台计时吗？')) return; t.totalTime=getCurrentSeconds(t); t.startTime=null; t.countdownEnd=null; t.status='暂停中'; saveTable(t);}
 function resetTable(id){ const t=tables.find(x=>x.id==id); if(!t) return; if(!confirm('重置后计时会清零，是否继续？')) return; t.totalTime=0; t.startTime=null; t.countdownEnd=null; t.status='未使用'; saveTable(t);}
-
 function deleteTableUI(id){
   if(!confirm('确定删除该桌台吗？')) return;
   if(!confirm('再次确认删除该桌台？')) return;
@@ -220,7 +223,6 @@ window.resetTable=resetTable;
 window.deleteTableUI=deleteTableUI;
 window.saveDetail=saveDetail;
 window.changeStore=changeStore;
-window.addStore=addStore;
 
 loadStores();
 loadTables();
