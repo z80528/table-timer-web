@@ -53,14 +53,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-// 状态
 window.currentTableId = null;
 let tables = [];
 let nextId = 1;
 const tableIdParam = new URLSearchParams(window.location.search).get('tableId');
 const isCustomerView = tableIdParam !== null;
 
-// 格式化时间
 function formatTime(sec){
   const h=String(Math.floor(sec/3600)).padStart(2,'0');
   const m=String(Math.floor(sec%3600/60)).padStart(2,'0');
@@ -68,7 +66,6 @@ function formatTime(sec){
   return `${h}:${m}:${s}`;
 }
 
-// 当前秒数
 function getCurrentSeconds(table){
   let total = table.totalTime||0;
   if(table.status==="使用中" && table.startTime){
@@ -77,7 +74,6 @@ function getCurrentSeconds(table){
   return total;
 }
 
-// Firebase
 function loadTables(){
   const tRef = ref(db,'tables');
   onValue(tRef, snapshot=>{
@@ -95,7 +91,6 @@ function saveTable(table){
   set(tRef,table);
 }
 
-// 桌台操作
 function addTable(){
   const id = Date.now().toString();
   const table = {
@@ -112,6 +107,7 @@ function addTable(){
   nextId++;
   saveTable(table);
 }
+
 function startTable(id){
   const t = tables.find(x=>x.id==id);
   if(!t || t.status==='使用中') return;
@@ -121,12 +117,22 @@ function startTable(id){
   t.startRecords.push(t.startTime);
   saveTable(t);
 }
+
 function countdownStart(id){ const input=prompt('请输入倒计时分钟数'); if(!input) return; const minutes=Number(input); if(isNaN(minutes)||minutes<=0){alert('请输入正确分钟数');return;} const t=tables.find(x=>x.id==id); if(!t) return; t.status='倒计时中'; t.countdownEnd=Date.now()+minutes*60*1000; saveTable(t);}
 function pauseTable(id){ const t=tables.find(x=>x.id==id); if(!t) return; if(!confirm('确定暂停当前桌台计时吗？')) return; t.totalTime=getCurrentSeconds(t); t.startTime=null; t.countdownEnd=null; t.status='暂停中'; saveTable(t);}
-function resetTable(id){ const t=tables.find(x=>x.id==id); if(!t) return; if(!confirm('重置后计时会清零，是否继续？')) return; t.totalTime=0; t.startTime=null; t.countdownEnd=null; t.status='未使用'; saveTable(t);}
+function resetTable(id){ 
+  const t = tables.find(x=>x.id==id);
+  if(!t) return;
+  if(!confirm('重置后计时会清零，是否继续？')) return;
+  t.totalTime=0;
+  t.startTime=null;
+  t.countdownEnd=null;
+  t.status='未使用';
+  t.startRecords=[]; // ✅ 清空开始记录
+  saveTable(t);
+}
 function deleteTable(id){ if(!confirm('确定删除该桌台吗？')) return; const tRef=ref(db,'tables/'+id); set(tRef,null);}
 
-// 渲染
 function renderUI(){
   const el = document.getElementById('tables');
   if(isCustomerView){
@@ -206,7 +212,6 @@ function renderUI(){
   if(statusEl) statusEl.innerText=t.status;
 }
 
-// 定时刷新
 setInterval(()=>{
   tables.forEach(t=>{
     if(t.status==='倒计时中' && t.countdownEnd){
