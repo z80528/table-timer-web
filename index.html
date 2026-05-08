@@ -40,6 +40,7 @@ ul{padding-left:20px;}
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
 
+// Firebase 配置
 const firebaseConfig = {
   apiKey: "AIzaSyCkdd-_Bc8dE4sOnM8PGpTk1YEKiNFkerc",
   authDomain: "table-timer-1.firebaseapp.com",
@@ -52,19 +53,21 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+// 全局状态
 window.currentTableId = null;
 let tables = [];
 let nextId = 1;
+const storeId = new URLSearchParams(window.location.search).get('storeId'); // 每家店独立 storeId
 const tableIdParam = new URLSearchParams(window.location.search).get('tableId');
 const isCustomerView = tableIdParam !== null;
 
+// 时间格式化
 function formatTime(sec){
   const h=String(Math.floor(sec/3600)).padStart(2,'0');
   const m=String(Math.floor(sec%3600/60)).padStart(2,'0');
   const s=String(sec%60).padStart(2,'0');
   return `${h}:${m}:${s}`;
 }
-
 function getCurrentSeconds(table){
   let total = table.totalTime||0;
   if(table.status==="使用中" && table.startTime){
@@ -73,8 +76,10 @@ function getCurrentSeconds(table){
   return total;
 }
 
+// Firebase 读取店铺桌台
 function loadTables(){
-  const tRef = ref(db,'tables');
+  if(!storeId){ alert('请带 storeId 参数访问网页'); return;}
+  const tRef = ref(db,'tables/'+storeId);
   onValue(tRef, snapshot=>{
     const val = snapshot.val();
     tables = val ? Object.values(val) : [];
@@ -85,11 +90,14 @@ function loadTables(){
     renderUI();
   });
 }
+
+// 保存桌台
 function saveTable(table){
-  const tRef = ref(db,'tables/'+table.id);
+  const tRef = ref(db,'tables/'+storeId+'/'+table.id);
   set(tRef,table);
 }
 
+// 桌台操作
 function addTable(){
   const id = Date.now().toString();
   const table = {
@@ -128,7 +136,7 @@ function pauseTable(id){
   t.countdownEnd=null;
   t.status='暂停中';
   if(!t.startRecords) t.startRecords=[];
-  t.startRecords.push({type:"pause",time:Date.now()}); // ✅ 记录暂停
+  t.startRecords.push({type:"pause",time:Date.now()});
   saveTable(t);
 }
 
@@ -140,18 +148,19 @@ function resetTable(id){
   t.startTime=null;
   t.countdownEnd=null;
   t.status='未使用';
-  t.startRecords=[]; // ✅ 清空所有记录
+  t.startRecords=[];
   saveTable(t);
 }
 
-function deleteTable(id){ if(!confirm('确定删除该桌台吗？')) return; const tRef=ref(db,'tables/'+id); set(tRef,null);}
+function deleteTable(id){ if(!confirm('确定删除该桌台吗？')) return; const tRef=ref(db,'tables/'+storeId+'/'+id); set(tRef,null);}
 
+// 渲染
 function renderUI(){
   const el = document.getElementById('tables');
   if(isCustomerView){
     if(!window.customerListenerBound){
       window.customerListenerBound=true;
-      const tRef = ref(db,'tables/'+tableIdParam);
+      const tRef = ref(db,'tables/'+storeId+'/'+tableIdParam);
       onValue(tRef, snapshot=>{
         const t = snapshot.val();
         if(!t){ el.innerHTML='<p>桌台不存在</p>'; return;}
@@ -204,7 +213,7 @@ function renderUI(){
     </div>`;
     const qrDiv=document.getElementById(`qrcode-${t.id}`);
     qrDiv.innerHTML='';
-    new QRCode(qrDiv,{text:`${window.location.href}?tableId=${t.id}`,width:100,height:100});
+    new QRCode(qrDiv,{text:`${window.location.href}?storeId=${storeId}&tableId=${t.id}`,width:100,height:100});
   }
 
   window.saveDetail = function(){
