@@ -58,7 +58,7 @@ const db = getDatabase(app);
 window.currentTableId = null;
 let tables = [];
 let stores = [];
-let currentStoreId = 'default';
+let currentStoreId = null;
 const tableIdParam = new URLSearchParams(window.location.search).get('tableId');
 const storeIdParam = new URLSearchParams(window.location.search).get('storeId');
 const isCustomerView = tableIdParam !== null && storeIdParam !== null;
@@ -83,7 +83,8 @@ function loadStores(){
   const sRef = ref(db,'stores');
   onValue(sRef, snapshot=>{
     stores = snapshot.val() ? Object.values(snapshot.val()) : [];
-    if(stores.length>0 && !stores.some(s => s.id === currentStoreId)){
+    // 默认选中第一个店铺
+    if(stores.length>0 && !currentStoreId){
       currentStoreId = stores[0].id;
     }
     renderUI();
@@ -92,6 +93,7 @@ function loadStores(){
 
 // 加载桌台
 function loadTables(){
+  if(!currentStoreId) return;
   const tRef = ref(db,'tables/'+currentStoreId);
   onValue(tRef, snapshot=>{
     const val = snapshot.val();
@@ -112,7 +114,11 @@ window.addStore = function(){
   const id = 'store_'+Date.now();
   const store = {id,name};
   set(ref(db,'stores/'+id),store)
-    .then(()=>{alert('店铺已创建！'); loadStores();})
+    .then(()=>{
+      alert('店铺已创建！');
+      currentStoreId = id; // 自动选中新店铺
+      loadStores(); // 刷新下拉框和桌台列表
+    })
     .catch(err=>alert('创建失败: '+err));
 }
 
@@ -181,7 +187,7 @@ function renderUI(){
   if(window.currentTableId){
     const t = tables.find(x=>x.id===window.currentTableId);
     if(!t) return;
-    el.innerHTML = `<div class="card" style="max-width:500px;margin:40px auto;" id="detail-container">
+    el.innerHTML += `<div class="card" style="max-width:500px;margin:40px auto;" id="detail-container">
       <button class="back-btn" onclick="window.currentTableId=null;renderUI()">← 返回</button>
       <input id="detail-name" value="${t.name}" style="border:none;font-size:32px;font-weight:bold;text-align:center;margin-bottom:20px;outline:none;background:none;"/>
       <div class="status ${t.status==='使用中'?'running':t.status==='暂停中'?'pause':t.status==='倒计时中'?'countdown':'unused'}" style="display:block;width:fit-content;margin:20px auto;" id="detail-status">${t.status}</div>
