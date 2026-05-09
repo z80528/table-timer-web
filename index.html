@@ -1,115 +1,8 @@
-<!DOCTYPE html>
-<html lang="zh">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>桌台计时系统</title>
-<style>
-body{margin:0;padding:20px;font-family:Arial;background:#f5f5f5;}
-.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
-button{border:none;padding:12px 16px;border-radius:12px;cursor:pointer;color:white;font-size:14px;}
-.add-btn{background:black;}
-/* 手机端桌台列表优化 */
-.tables{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); /* 每行更多桌台 */
-  gap:8px;
-}
-
-.card{
-  background:white;
-  border-radius:12px;
-  padding:8px;
-  box-shadow:0 1px 4px rgba(0,0,0,0.08);
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  min-height:120px; /* 高度固定，保证布局整齐 */
-  font-size:12px;   /* 内容文字缩小适应小格子 */
-  cursor:pointer;
-  transition:transform 0.1s;
-}
-.card:hover{
-  transform:scale(1.02);
-}
-
-.card h2{
-  font-size:14px;
-  margin:4px 0;
-  text-align:center;
-  word-break:break-word;
-}
-
-.card .status{
-  font-size:10px;
-  padding:3px 8px;
-  margin:4px 0;
-}
-
-.card .time{
-  font-size:18px;
-  font-weight:bold;
-  margin:6px 0;
-}
-
-.card .remark{
-  font-size:10px;
-  color:#666;
-  text-align:center;
-  margin-top:2px;
-}
-
-/* 调整按钮在详情页小屏显示 */
-.btns button{
-  font-size:12px;
-  padding:6px 8px;
-}
-
-/* 响应式：平板/大屏恢复原大小 */
-@media(min-width:600px){
-  .tables{
-    grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
-  }
-  .card{
-    min-height:140px;
-    font-size:14px;
-  }
-  .card h2{ font-size:16px; }
-  .card .status{ font-size:12px; }
-  .card .time{ font-size:24px; }
-  .btns button{ font-size:14px; padding:10px 12px; }
-}
-.status{display:inline-block;padding:5px 12px;border-radius:20px;color:white;font-size:12px;}
-.unused{background:#999;}
-.running{background:green;}
-.pause{background:orange;}
-.countdown{background:#9c27b0;}
-.time{font-size:42px;text-align:center;margin:30px 0;font-weight:bold;}
-.remark{margin-top:10px;color:#666;font-size:14px;word-break:break-all;line-height:1.5;}
-.btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px;}
-.start{background:green;}
-.pause-btn{background:orange;}
-.reset{background:#2196f3;}
-.delete{background:red;}
-.countdown-btn{background:#9c27b0;}
-.save-btn{background:#ff9800;}
-.back-btn{background:#666;margin-bottom:20px;}
-textarea{width:100%;min-height:100px;border-radius:12px;border:1px solid #ddd;padding:12px;box-sizing:border-box;resize:none;font-size:14px;margin-top:20px;}
-input{width:100%;box-sizing:border-box;}
-h1,h2,h3{margin:0;}
-#qrcode{margin-top:10px;text-align:center;}
-ul{padding-left:20px;}
-</style>
-</head>
-<body>
-<div id="tables"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
 
-// Firebase 配置
+// ================== Firebase 配置 ==================
 const firebaseConfig = {
   apiKey: "AIzaSyCkdd-_Bc8dE4sOnM8PGpTk1YEKiNFkerc",
   authDomain: "table-timer-1.firebaseapp.com",
@@ -122,15 +15,15 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+// ================== 全局变量 ==================
+window.currentTableId = null;
 let tables = [];
 let nextId = 1;
 const storeId = new URLSearchParams(window.location.search).get('storeId');
 const tableIdParam = new URLSearchParams(window.location.search).get('tableId');
 const isCustomerView = tableIdParam !== null;
-let currentTableId = null;
-let customerTimer = null;
 
-// 格式化时间
+// ================== 工具函数 ==================
 function formatTime(sec){
   const h=String(Math.floor(sec/3600)).padStart(2,'0');
   const m=String(Math.floor(sec%3600/60)).padStart(2,'0');
@@ -146,12 +39,13 @@ function getCurrentSeconds(table){
   return total;
 }
 
-// ================== 数据操作 ==================
+// ================== 保存桌台 ==================
 function saveTable(table){
   const tRef = ref(db,'tables/'+storeId+'/'+table.id);
   set(tRef,table);
 }
 
+// ================== 新增桌台 ==================
 function addTable(){
   const id = Date.now().toString();
   const table = {
@@ -169,9 +63,40 @@ function addTable(){
   saveTable(table);
 }
 
-// 各类操作
-function startTable(id){ updateStatus(id,'使用中'); }
-function pauseTable(id){ updateStatus(id,'暂停中'); }
+// ================== 桌台操作 ==================
+function startTable(id){
+  const t = tables.find(x=>x.id==id);
+  if(!t || t.status==='使用中') return;
+  t.status='使用中';
+  t.startTime=Date.now();
+  t.startRecords.push({type:"start",time:t.startTime});
+  saveTable(t);
+}
+
+function countdownStart(id){
+  const input=prompt('请输入倒计时分钟数'); 
+  if(!input) return; 
+  const minutes=Number(input); 
+  if(isNaN(minutes)||minutes<=0){alert('请输入正确分钟数');return;} 
+  const t=tables.find(x=>x.id==id); 
+  if(!t) return; 
+  t.status='倒计时中'; 
+  t.countdownEnd=Date.now()+minutes*60*1000; 
+  saveTable(t);
+}
+
+function pauseTable(id){
+  const t = tables.find(x=>x.id==id);
+  if(!t) return;
+  if(!confirm('确定暂停当前桌台计时吗？')) return;
+  t.totalTime=getCurrentSeconds(t);
+  t.startTime=null;
+  t.countdownEnd=null;
+  t.status='暂停中';
+  t.startRecords.push({type:"pause",time:Date.now()});
+  saveTable(t);
+}
+
 function resetTable(id){ 
   const t = tables.find(x=>x.id==id);
   if(!t) return;
@@ -183,63 +108,54 @@ function resetTable(id){
   t.startRecords=[];
   saveTable(t);
 }
-function deleteTable(id){ if(!confirm('确定删除该桌台吗？')) return; const tRef=ref(db,'tables/'+storeId+'/'+id); set(tRef,null);}
-function countdownStart(id){ 
-  const input=prompt('请输入倒计时分钟数'); 
-  if(!input) return; 
-  const minutes=Number(input); 
-  if(isNaN(minutes)||minutes<=0){alert('请输入正确分钟数');return;} 
-  updateStatus(id,'倒计时中',minutes*60*1000);
+
+function deleteTable(id){ 
+  if(!confirm('确定删除该桌台吗？')) return; 
+  const tRef=ref(db,'tables/'+storeId+'/'+id); 
+  set(tRef,null);
 }
 
-// 状态更新封装
-function updateStatus(id,newStatus,countdownMs){
-  const t = tables.find(x=>x.id==id);
-  if(!t) return;
-  const now = Date.now();
-  if(newStatus==='使用中'){
-    if(t.status==='使用中') return;
-    t.status='使用中';
-    t.startTime = now;
-    t.startRecords.push({type:"start",time:now});
-  } else if(newStatus==='暂停中'){
-    if(!confirm('确定暂停当前桌台计时吗？')) return;
-    t.totalTime=getCurrentSeconds(t);
-    t.startTime=null;
-    t.countdownEnd=null;
-    t.status='暂停中';
-    t.startRecords.push({type:"pause",time:now});
-  } else if(newStatus==='倒计时中'){
-    t.status='倒计时中';
-    t.countdownEnd = now + countdownMs;
-  }
-  saveTable(t);
-}
-
-// ================== 渲染 ==================
+// ================== 优化版 renderUI ==================
 function renderUI(){
   const el = document.getElementById('tables');
 
-  // ===== 顾客端 =====
+  // ---------- 顾客端 ----------
   if(isCustomerView){
-    const tRef = ref(db,'tables/'+storeId+'/'+tableIdParam);
-    if(!customerTimer){
+    if(!window.customerListenerBound){
+      window.customerListenerBound=true;
+      const tRef = ref(db,'tables/'+storeId+'/'+tableIdParam);
+      let customerTimer = null;
+      let currentTable = null;
+
       onValue(tRef, snapshot=>{
         const t = snapshot.val();
-        if(!t){ el.innerHTML='<p>桌台不存在</p>'; return; }
+        if(!t){
+          el.innerHTML = '<p>桌台不存在</p>';
+          return;
+        }
+        currentTable = t;
+
         if(!document.getElementById('customer-time')){
-          el.innerHTML=`
+          el.innerHTML = `
             <h2 id="customer-name"></h2>
             <div class="time" id="customer-time">00:00:00</div>
             <div class="remark" id="customer-remark"></div>
           `;
         }
+
         document.getElementById('customer-name').innerText = t.name;
-        document.getElementById('customer-remark').innerText = t.remark||'暂无备注';
+        document.getElementById('customer-remark').innerText = t.remark || '暂无备注';
+
+        if(customerTimer) clearInterval(customerTimer);
+
         customerTimer = setInterval(()=>{
-          let seconds = t.totalTime||0;
-          if(t.status==='使用中' && t.startTime) seconds += Math.floor((Date.now()-t.startTime)/1000);
-          else if(t.status==='倒计时中' && t.countdownEnd) seconds = Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000));
+          if(!currentTable) return;
+          let seconds = currentTable.totalTime || 0;
+          if(currentTable.status === "使用中" && currentTable.startTime){
+            seconds += Math.floor((Date.now() - currentTable.startTime)/1000);
+          } else if(currentTable.status === "倒计时中" && currentTable.countdownEnd){
+            seconds = Math.max(0, Math.floor((currentTable.countdownEnd - Date.now())/1000));
+          }
           document.getElementById('customer-time').innerText = formatTime(seconds);
         },1000);
       });
@@ -247,12 +163,13 @@ function renderUI(){
     return;
   }
 
-  // ===== 管理端列表 =====
+  // ---------- 管理端列表 ----------
   const active = document.activeElement;
   const isEditing = active && (active.tagName==='INPUT' || active.tagName==='TEXTAREA');
 
   if(!currentTableId){
     if(!document.querySelector('.tables')){
+      el.innerHTML = '';
       const topDiv = document.createElement('div');
       topDiv.className='top';
       topDiv.innerHTML='<h1>桌台计时系统</h1><button class="add-btn">+ 新增桌台</button>';
@@ -268,7 +185,7 @@ function renderUI(){
         card.innerHTML=`
           <h2>${t.name}</h2>
           <div class="status ${t.status==='使用中'?'running':t.status==='暂停中'?'pause':t.status==='倒计时中'?'countdown':'unused'}">${t.status}</div>
-          <div class="time">${formatTime(getCurrentSeconds(t))}</div>
+          <div class="time" id="time-${t.id}">${formatTime(getCurrentSeconds(t))}</div>
         `;
         card.onclick=()=>{ currentTableId=t.id; renderUI(); };
         listDiv.appendChild(card);
@@ -284,7 +201,7 @@ function renderUI(){
           formatTime(Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000))) :
           formatTime(getCurrentSeconds(t));
         if(statusDiv){
-          statusDiv.innerText=t.status;
+          statusDiv.innerText = t.status;
           statusDiv.className='status '+(t.status==='使用中'?'running':t.status==='暂停中'?'pause':t.status==='倒计时中'?'countdown':'unused');
         }
       });
@@ -292,7 +209,7 @@ function renderUI(){
     return;
   }
 
-  // ===== 管理端详情 =====
+  // ---------- 管理端详情 ----------
   const t = tables.find(x=>x.id===currentTableId);
   if(!t) return;
 
@@ -319,7 +236,6 @@ function renderUI(){
     <div id="qrcode" style="text-align:center;"></div>
   </div>`;
 
-  // ✅ 二维码只生成一次
   const qrDiv = document.getElementById('qrcode');
   qrDiv.innerHTML='';
   new QRCode(qrDiv,{
@@ -344,7 +260,7 @@ function loadTables(){
   });
 }
 
-// ================== 定时器 ==================
+// ================== 优化定时器 ==================
 setInterval(()=>{
   tables.forEach(t=>{
     if(t.status==='倒计时中' && t.countdownEnd && Date.now()>=t.countdownEnd){
@@ -354,18 +270,17 @@ setInterval(()=>{
       saveTable(t);
     }
   });
-  renderUI();
+  renderUI(); // 每秒只更新计时数字和状态，不重建 DOM
 },1000);
 
-// ================== 全局方法 ==================
+// ================== 暴露操作函数 ==================
 window.addTable=addTable;
 window.startTable=startTable;
+window.countdownStart=countdownStart;
 window.pauseTable=pauseTable;
 window.resetTable=resetTable;
 window.deleteTable=deleteTable;
-window.countdownStart=countdownStart;
 
+// ================== 初始化 ==================
 loadTables();
 </script>
-</body>
-</html>
