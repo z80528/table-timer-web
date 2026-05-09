@@ -27,10 +27,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/fireba
 import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey: "你的key",
-  authDomain: "xxx.firebaseapp.com",
-  databaseURL: "你的数据库URL",
-  projectId: "xxx",
+  apiKey: "AIzaSyXXXXXX",
+  authDomain: "table-timer-1.firebaseapp.com",
+  databaseURL: "https://table-timer-1-default-rtdb.firebaseio.com",
+  projectId: "table-timer-1",
+  storageBucket: "table-timer-1.appspot.com",
+  messagingSenderId: "1234567890",
+  appId: "1:1234567890:web:xxxxxx"
 };
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
