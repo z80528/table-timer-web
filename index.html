@@ -95,13 +95,24 @@ function render(){
     </div>
     <div class="tables">
       ${tables.map(t=>`
-        <div class="card" onclick="openDetail('${t.id}')">
+        <div class="card table-card" data-id="${t.id}">
           <h3>${t.name}</h3>
           <div class="status ${statusClass(t.status)}">${t.status}</div>
           <div class="time" id="time-${t.id}">00:00:00</div>
         </div>
       `).join('')}
     </div>`;
+
+    // ✅ 用事件绑定替代 inline onclick（解决点不进详情页问题）
+    setTimeout(()=>{
+      document.querySelectorAll('.table-card').forEach(card=>{
+        card.onclick=()=>{
+          currentTableId=card.dataset.id;
+          render();
+        };
+      });
+    },0);
+
     return;
   }
 
@@ -120,6 +131,23 @@ function render(){
   <button class="reset" onclick="reset('${t.id}')">重置</button>
 </div>
 
+  </div>`;window.saveDetail=()=>{ t.name=document.getElementById('name').value; t.remark=document.getElementById('remark').value; save(t); }; }')"> <h3>${t.name}</h3> <div class="status ${statusClass(t.status)}">${t.status}</div> <div class="time" id="time-${t.id}">00:00:00</div> </div> ).join('')} </div>; return; }
+
+const t=tables.find(x=>x.id===currentTableId); if(!t) return;
+
+el.innerHTML=`
+
+  <div class="card" style="max-width:500px;margin:auto;">
+    <button class="back-btn" onclick="back()">返回</button>
+    <input id="name" value="${t.name}" />
+    <div class="status ${statusClass(t.status)}">${t.status}</div>
+    <div class="time" id="detail-time">00:00:00</div>
+    <textarea id="remark">${t.remark||''}</textarea>
+    <div class="btns">
+      <button class="start" onclick="start('${t.id}')">开始</button>
+      <button class="pause-btn" onclick="pause('${t.id}')">暂停</button>
+      <button class="reset" onclick="reset('${t.id}')">重置</button>
+    </div>
   </div>`;window.saveDetail=()=>{ t.name=document.getElementById('name').value; t.remark=document.getElementById('remark').value; save(t); }; }
 
 /* ================== 只更新时间，不重绘DOM ================== */ function updateTimers(){ if(isCustomer){ updateCustomer(); return; }
