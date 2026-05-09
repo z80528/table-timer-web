@@ -274,6 +274,18 @@ setInterval(()=>{
     }
   });
 
+  let isEditing = false;
+
+document.addEventListener('focusin', (e)=>{
+  if(e.target.id === 'detail-name' || e.target.id === 'detail-remark'){
+    isEditing = true;
+  }
+});
+
+document.addEventListener('focusout', ()=>{
+  isEditing = false;
+});
+  
   // ✅ 只更新详情页时间（不重绘页面）
   if(window.currentTableId){
     const t = tables.find(x=>x.id==window.currentTableId);
