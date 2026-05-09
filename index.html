@@ -208,7 +208,16 @@ function renderUI(){
   // 生成二维码
   const qrDiv=document.getElementById('qrcode');
   qrDiv.innerHTML='';
-  new QRCode(qrDiv,{text:`${window.location.href}?storeId=${storeId}&tableId=${t.id}`,width:120,height:120});
+  // ✅ 生成正确二维码（不会重复参数）
+const baseUrl = window.location.origin + window.location.pathname;
+
+qrDiv.innerHTML = ''; // 防止重复生成
+
+new QRCode(qrDiv, {
+  text: `${baseUrl}?storeId=${storeId}&tableId=${t.id}`,
+  width: 120,
+  height: 120
+});
 
   window.saveDetail = function(){
     t.name=document.getElementById('detail-name').value;
