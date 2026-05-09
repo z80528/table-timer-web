@@ -7,11 +7,11 @@
 <style>
 body{margin:0;padding:20px;font-family:Arial;background:#f5f5f5;}
 .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
-button{border:none;padding:12px 16px;border-radius:12px;cursor:pointer;color:white;}
+button{border:none;padding:12px 16px;border-radius:12px;cursor:pointer;color:white;font-size:14px;}
 .add-btn{background:black;}
 .tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px;}
-.card{background:white;border-radius:20px;padding:20px;}
-.status{padding:5px 12px;border-radius:20px;color:white;font-size:12px;}
+.card{background:white;border-radius:20px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,0.08);}
+.status{display:inline-block;padding:5px 12px;border-radius:20px;color:white;font-size:12px;}
 .unused{background:#999;} .running{background:green;} .pause{background:orange;} .countdown{background:#9c27b0;}
 .time{font-size:42px;text-align:center;margin:30px 0;font-weight:bold;}
 textarea,input{width:100%;box-sizing:border-box;}
@@ -19,22 +19,23 @@ textarea,input{width:100%;box-sizing:border-box;}
 </head>
 <body>
 <div id="tables"></div>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
 
+// ======= 🔹 在这里替换成你自己的 Firebase 配置 🔹 =======
 const firebaseConfig = {
-  apiKey: "AIzaSyXXXXXX",
+  apiKey: "AIzaSyCkdd-_Bc8dE4sOnM8PGpTk1YEKiNFkerc",
   authDomain: "table-timer-1.firebaseapp.com",
   databaseURL: "https://table-timer-1-default-rtdb.firebaseio.com",
   projectId: "table-timer-1",
-  storageBucket: "table-timer-1.appspot.com",
-  messagingSenderId: "1234567890",
-  appId: "1:1234567890:web:xxxxxx"
+  storageBucket: "table-timer-1.firebasestorage.app",
+  messagingSenderId: "182367678402",
+  appId: "1:182367678402:web:9e502cc9b3581c3b33305b"
 };
+// =========================================================
+
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
@@ -61,6 +62,7 @@ function getSec(t){
 function save(t){ set(ref(db,'tables/'+storeId+'/'+t.id),t); }
 
 function load(){
+  if(!storeId){ alert('请带 storeId 参数访问网页'); return;}
   onValue(ref(db,'tables/'+storeId),snap=>{
     tables=snap.val()?Object.values(snap.val()):[];
     nextId=tables.length?Math.max(...tables.map(x=>x.displayNumber||1))+1:1;
@@ -69,20 +71,15 @@ function load(){
 }
 
 function add(){
-  save({
-    id:Date.now().toString(),
-    displayNumber:nextId,
-    name:'桌台 '+nextId,
-    status:'未使用',
-    totalTime:0,
-    remark:'',
-    startRecords:[]
-  });
+  const id=Date.now().toString();
+  save({id:id, displayNumber:nextId, name:'桌台 '+nextId, status:'未使用', totalTime:0, startTime:null, countdownEnd:null, remark:'', startRecords:[]});
+  nextId++;
 }
 
 function start(id){
   let t=tables.find(x=>x.id==id);
-  t.status='使用中'; t.startTime=Date.now();
+  t.status='使用中';
+  t.startTime=Date.now();
   t.startRecords.push({type:'start',time:Date.now()});
   save(t);
 }
@@ -98,80 +95,68 @@ function pause(id){
 
 function reset(id){
   let t=tables.find(x=>x.id==id);
-  t.totalTime=0; t.status='未使用'; t.startRecords=[];
+  t.totalTime=0; t.status='未使用'; t.startRecords=[]; t.startTime=null; t.countdownEnd=null;
   save(t);
 }
 
 function render(){
   const el=document.getElementById('tables');
 
-  // 顾客端（🔥实时计时）
+  // 顾客端页面
   if(isCustomer){
     const tRef=ref(db,'tables/'+storeId+'/'+tableIdParam);
     let timer=null, current=null;
-
     onValue(tRef,snap=>{
       const t=snap.val();
-      if(!t){el.innerHTML='桌台不存在';return;}
-
+      if(!t){ el.innerHTML='<p>桌台不存在</p>'; return; }
       current=t;
-
       if(!document.getElementById('ct')){
-        el.innerHTML=`<h2 id="cn"></h2>
-        <div class="time" id="ct"></div>
-        <div id="cr"></div>`;
+        el.innerHTML=`<h2 id="cn"></h2><div class="time" id="ct"></div><div id="cr"></div>`;
       }
-
       document.getElementById('cn').innerText=t.name;
-      document.getElementById('cr').innerText=t.remark||'';
+      document.getElementById('cr').innerText=t.remark||'暂无备注';
 
       if(timer) clearInterval(timer);
-
       timer=setInterval(()=>{
         let s=current.totalTime||0;
-        if(current.status==="使用中"&&current.startTime){
+        if(current.status==="使用中" && current.startTime){
           s+=Math.floor((Date.now()-current.startTime)/1000);
+        }
+        else if(current.status==="倒计时中" && current.countdownEnd){
+          s=Math.max(0,Math.floor((current.countdownEnd-Date.now())/1000));
         }
         document.getElementById('ct').innerText=formatTime(s);
       },1000);
     });
-
     return;
   }
 
   // 管理端列表
   if(!window.cur){
-    el.innerHTML=`<button onclick="add()">+新增</button>`+
-    tables.map(t=>`<div onclick="cur='${t.id}';render()">
-      ${t.name}<br>${formatTime(getSec(t))}
-    </div>`).join('');
+    el.innerHTML=`<button onclick="add()">+新增</button>`+tables.map(t=>`<div onclick="window.cur='${t.id}';render()">${t.name}<br>${formatTime(getSec(t))}</div>`).join('');
     return;
   }
 
   // 详情页
-  const t=tables.find(x=>x.id==cur);
-
+  const t=tables.find(x=>x.id==window.cur);
   el.innerHTML=`
-  <button onclick="cur=null;render()">返回</button>
-  <input id="n" value="${t.name}">
-  <div class="time">${formatTime(getSec(t))}</div>
-  <textarea id="r">${t.remark||''}</textarea>
-  <button onclick="saveDetail()">保存</button>
-  <button onclick="start('${t.id}')">开始</button>
-  <button onclick="pause('${t.id}')">暂停</button>
-  <button onclick="reset('${t.id}')">重置</button>
-  <div id="qrcode"></div>
-  <ul>
-    ${t.startRecords.map(r=>`<li>${r.type} ${new Date(r.time).toLocaleString()}</li>`).join('')}
-  </ul>
+    <button onclick="window.cur=null;render()">返回</button>
+    <input id="n" value="${t.name}">
+    <div class="time">${formatTime(getSec(t))}</div>
+    <textarea id="r">${t.remark||''}</textarea>
+    <button onclick="saveDetail()">保存</button>
+    <button onclick="start('${t.id}')">开始</button>
+    <button onclick="pause('${t.id}')">暂停</button>
+    <button onclick="reset('${t.id}')">重置</button>
+    <div id="qrcode" style="text-align:center;"></div>
+    <ul>${t.startRecords.map(r=>`<li>${r.type} ${new Date(r.time).toLocaleString()}</li>`).join('')}</ul>
   `;
 
-  // ✅ 修复二维码（关键）
+  // 🔹 生成二维码（顾客扫码实时同步）
   const base=location.origin+location.pathname;
-  new QRCode(document.getElementById("qrcode"),{
-    text:`${base}?storeId=${storeId}&tableId=${t.id}`,
-    width:120,height:120
-  });
+  const qrDiv=document.getElementById("qrcode");
+  qrDiv.innerHTML='';
+  new QRCode(qrDiv,{text:`${base}?storeId=${storeId}&tableId=${t.id}`,width:120,height:120});
 
   window.saveDetail=()=>{
     t.name=document.getElementById('n').value;
@@ -180,10 +165,9 @@ function render(){
   };
 }
 
-window.add=add;
-window.start=start;
-window.pause=pause;
-window.reset=reset;
+setInterval(()=>{ render(); },1000);
+
+window.add=add; window.start=start; window.pause=pause; window.reset=reset;
 
 load();
 </script>
