@@ -1,30 +1,45 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>桌台计时系统</title>
+<title>桌台计时器</title>
 <style>
-body{margin:0;padding:20px;font-family:Arial;background:#f5f5f5;}
-.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
-button{border:none;padding:12px 16px;border-radius:12px;cursor:pointer;color:white;font-size:14px;}
-.add-btn{background:black;}
-.tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px;}
-.card{background:white;border-radius:20px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,0.08);}
-.status{display:inline-block;padding:5px 12px;border-radius:20px;color:white;font-size:12px;}
-.unused{background:#999;} .running{background:green;} .pause{background:orange;} .countdown{background:#9c27b0;}
-.time{font-size:42px;text-align:center;margin:30px 0;font-weight:bold;}
-textarea,input{width:100%;box-sizing:border-box;}
+body { font-family: Arial, sans-serif; padding: 20px; background: #f0f0f0; }
+#tables { display: flex; flex-wrap: wrap; gap: 10px; }
+.card { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 120px; text-align: center; cursor: pointer; }
+.card:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+button { margin-bottom: 10px; padding: 8px 12px; border:none; border-radius:5px; background:#007BFF; color:#fff; cursor:pointer; }
+button:hover { background:#0056b3; }
 </style>
 </head>
 <body>
-<div id="tables"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
 
-// ======= 🔹 在这里替换成你自己的 Firebase 配置 🔹 =======
+<h2>桌台管理</h2>
+<button onclick="addTable()">+新增桌台</button>
+<div id="tables"></div>
+
+<!-- 详情页 -->
+<div id="detail" style="display:none;">
+  <h3 id="detailName"></h3>
+  <div id="timerDisplay">00:00:00</div>
+  <button onclick="start()">开始</button>
+  <button onclick="pause()">暂停</button>
+  <button onclick="reset()">重置</button>
+  <br><br>
+  <label>备注: <input id="note" type="text"><button onclick="saveNote()">保存备注</button></label>
+  <br><br>
+  <div id="qrcode"></div>
+  <button onclick="back()">返回主页</button>
+</div>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getDatabase, ref, set, onValue, push, update } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+import QRCode from "https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js";
+
+// --- Firebase 配置 ---
 const firebaseConfig = {
   apiKey: "AIzaSyCkdd-_Bc8dE4sOnM8PGpTk1YEKiNFkerc",
   authDomain: "table-timer-1.firebaseapp.com",
@@ -34,142 +49,125 @@ const firebaseConfig = {
   messagingSenderId: "182367678402",
   appId: "1:182367678402:web:9e502cc9b3581c3b33305b"
 };
-// =========================================================
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-let tables=[], nextId=1;
-const storeId = new URLSearchParams(location.search).get('storeId');
-const tableIdParam = new URLSearchParams(location.search).get('tableId');
-const isCustomer = tableIdParam!=null;
+let tables = [];
+let cur = null;
+let timerInterval = null;
+let timerStart = 0;
+let pausedSec = 0;
 
-function formatTime(s){
-  const h=String(Math.floor(s/3600)).padStart(2,'0');
-  const m=String(Math.floor(s%3600/60)).padStart(2,'0');
-  const ss=String(s%60).padStart(2,'0');
-  return `${h}:${m}:${ss}`;
-}
+// 获取桌台数据
+onValue(ref(db, 'tables'), snapshot => {
+  tables = snapshot.val() ? Object.values(snapshot.val()) : [];
+  render();
+});
 
-function getSec(t){
-  let s=t.totalTime||0;
-  if(t.status==="使用中" && t.startTime){
-    s+=Math.floor((Date.now()-t.startTime)/1000);
+// 主页渲染
+function render() {
+  const tablesDiv = document.getElementById('tables');
+  const detailDiv = document.getElementById('detail');
+  if(cur){
+    detailDiv.style.display='block';
+    tablesDiv.style.display='none';
+    const table = tables.find(t=>t.id===cur);
+    if(!table) return;
+    document.getElementById('detailName').innerText = table.name;
+    document.getElementById('note').value = table.note||'';
+    updateTimerDisplay(table);
+    generateQRCode(table);
+    return;
   }
-  return s;
+  detailDiv.style.display='none';
+  tablesDiv.style.display='flex';
+  tablesDiv.innerHTML = tables.map(t => `
+    <div class="card" onclick="openDetail('${t.id}')">
+      <div>${t.name}</div>
+      <div>${formatTime(t.time || 0)}</div>
+    </div>
+  `).join('');
 }
 
-function save(t){ set(ref(db,'tables/'+storeId+'/'+t.id),t); }
+// 打开详情
+function openDetail(id){ cur=id; render(); }
 
-function load(){
-  if(!storeId){ alert('请带 storeId 参数访问网页'); return;}
-  onValue(ref(db,'tables/'+storeId),snap=>{
-    tables=snap.val()?Object.values(snap.val()):[];
-    nextId=tables.length?Math.max(...tables.map(x=>x.displayNumber||1))+1:1;
-    render();
+// 返回主页
+function back(){ cur=null; clearInterval(timerInterval); render(); }
+
+// 时间格式化
+function formatTime(sec){
+  const h = String(Math.floor(sec/3600)).padStart(2,'0');
+  const m = String(Math.floor(sec%3600/60)).padStart(2,'0');
+  const s = String(sec%60).padStart(2,'0');
+  return `${h}:${m}:${s}`;
+}
+
+// 更新计时器显示
+function updateTimerDisplay(table){
+  clearInterval(timerInterval);
+  let start = Date.now() - (table.time || 0)*1000;
+  timerInterval = setInterval(()=>{
+    const elapsed = Math.floor((Date.now() - start)/1000);
+    document.getElementById('timerDisplay').innerText = formatTime(elapsed);
+  }, 500);
+}
+
+// 开始
+function start(){
+  const tableRef = ref(db, `tables/${cur}`);
+  onValue(tableRef, snapshot=>{
+    const table = snapshot.val();
+    timerStart = Date.now() - (table.time||0)*1000;
+    timerInterval = setInterval(()=>{
+      const elapsed = Math.floor((Date.now() - timerStart)/1000);
+      update(table.id, {time: elapsed});
+      document.getElementById('timerDisplay').innerText = formatTime(elapsed);
+    },500);
   });
 }
 
-function add(){
-  const id=Date.now().toString();
-  save({id:id, displayNumber:nextId, name:'桌台 '+nextId, status:'未使用', totalTime:0, startTime:null, countdownEnd:null, remark:'', startRecords:[]});
-  nextId++;
+// 暂停
+function pause(){
+  clearInterval(timerInterval);
+  const tableRef = ref(db, `tables/${cur}`);
+  onValue(tableRef, snapshot=>{
+    const table = snapshot.val();
+    update(tableRef, {time: Math.floor((Date.now()-timerStart)/1000)});
+  });
 }
 
-function start(id){
-  let t=tables.find(x=>x.id==id);
-  t.status='使用中';
-  t.startTime=Date.now();
-  t.startRecords.push({type:'start',time:Date.now()});
-  save(t);
+// 重置
+function reset(){
+  clearInterval(timerInterval);
+  update(ref(db, `tables/${cur}`), {time:0});
+  document.getElementById('timerDisplay').innerText = '00:00:00';
 }
 
-function pause(id){
-  let t=tables.find(x=>x.id==id);
-  t.totalTime=getSec(t);
-  t.status='暂停中';
-  t.startTime=null;
-  t.startRecords.push({type:'pause',time:Date.now()});
-  save(t);
+// 新增桌台
+function addTable(){
+  const newId = 'table_' + (tables.length+1);
+  const newTable = {id:newId, name:'桌台 '+(tables.length+1), time:0, note:''};
+  set(ref(db, 'tables/'+newId), newTable);
 }
 
-function reset(id){
-  let t=tables.find(x=>x.id==id);
-  t.totalTime=0; t.status='未使用'; t.startRecords=[]; t.startTime=null; t.countdownEnd=null;
-  save(t);
+// 保存备注
+function saveNote(){
+  const note = document.getElementById('note').value;
+  update(ref(db, `tables/${cur}`), {note});
 }
 
-function render(){
-  const el=document.getElementById('tables');
-
-  // 顾客端页面
-  if(isCustomer){
-    const tRef=ref(db,'tables/'+storeId+'/'+tableIdParam);
-    let timer=null, current=null;
-    onValue(tRef,snap=>{
-      const t=snap.val();
-      if(!t){ el.innerHTML='<p>桌台不存在</p>'; return; }
-      current=t;
-      if(!document.getElementById('ct')){
-        el.innerHTML=`<h2 id="cn"></h2><div class="time" id="ct"></div><div id="cr"></div>`;
-      }
-      document.getElementById('cn').innerText=t.name;
-      document.getElementById('cr').innerText=t.remark||'暂无备注';
-
-      if(timer) clearInterval(timer);
-      timer=setInterval(()=>{
-        let s=current.totalTime||0;
-        if(current.status==="使用中" && current.startTime){
-          s+=Math.floor((Date.now()-current.startTime)/1000);
-        }
-        else if(current.status==="倒计时中" && current.countdownEnd){
-          s=Math.max(0,Math.floor((current.countdownEnd-Date.now())/1000));
-        }
-        document.getElementById('ct').innerText=formatTime(s);
-      },1000);
-    });
-    return;
-  }
-
-  // 管理端列表
-  if(!window.cur){
-    el.innerHTML=`<button onclick="add()">+新增</button>`+tables.map(t=>`<div onclick="window.cur='${t.id}';render()">${t.name}<br>${formatTime(getSec(t))}</div>`).join('');
-    return;
-  }
-
-  // 详情页
-  const t=tables.find(x=>x.id==window.cur);
-  el.innerHTML=`
-    <button onclick="window.cur=null;render()">返回</button>
-    <input id="n" value="${t.name}">
-    <div class="time">${formatTime(getSec(t))}</div>
-    <textarea id="r">${t.remark||''}</textarea>
-    <button onclick="saveDetail()">保存</button>
-    <button onclick="start('${t.id}')">开始</button>
-    <button onclick="pause('${t.id}')">暂停</button>
-    <button onclick="reset('${t.id}')">重置</button>
-    <div id="qrcode" style="text-align:center;"></div>
-    <ul>${t.startRecords.map(r=>`<li>${r.type} ${new Date(r.time).toLocaleString()}</li>`).join('')}</ul>
-  `;
-
-  // 🔹 生成二维码（顾客扫码实时同步）
-  const base=location.origin+location.pathname;
-  const qrDiv=document.getElementById("qrcode");
-  qrDiv.innerHTML='';
-  new QRCode(qrDiv,{text:`${base}?storeId=${storeId}&tableId=${t.id}`,width:120,height:120});
-
-  window.saveDetail=()=>{
-    t.name=document.getElementById('n').value;
-    t.remark=document.getElementById('r').value;
-    save(t);
-  };
+// 生成二维码
+function generateQRCode(table){
+  const qrcodeDiv = document.getElementById('qrcode');
+  qrcodeDiv.innerHTML='';
+  QRCode.toCanvas(qrcodeDiv, `${window.location.href}?table=${table.id}`, function (error) {
+    if (error) console.error(error);
+  });
 }
-
-setInterval(()=>{ render(); },1000);
-
-window.add=add; window.start=start; window.pause=pause; window.reset=reset;
-
-load();
 </script>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 </body>
 </html>
