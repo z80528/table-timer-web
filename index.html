@@ -155,16 +155,51 @@ function renderUI(){
     if(!window.customerListenerBound){
       window.customerListenerBound=true;
       const tRef = ref(db,'tables/'+storeId+'/'+tableIdParam);
-      onValue(tRef, snapshot=>{
-        const t = snapshot.val();
-        if(!t){ el.innerHTML='<p>桌台不存在</p>'; return;}
-        let seconds = t.totalTime||0;
-        if(t.status==="使用中" && t.startTime) seconds += Math.floor((Date.now()-t.startTime)/1000);
-        else if(t.status==="倒计时中" && t.countdownEnd) seconds = Math.max(0,Math.floor((t.countdownEnd-Date.now())/1000));
-        el.innerHTML=`<h2>${t.name}</h2>
-          <div class="time">${formatTime(seconds)}</div>
-          <div class="remark">${t.remark||'暂无备注'}</div>`;
-      });
+     let customerTimer = null;
+let currentTable = null;
+
+// 监听 Firebase 数据
+onValue(tRef, snapshot=>{
+  const t = snapshot.val();
+  if(!t){
+    el.innerHTML = '<p>桌台不存在</p>';
+    return;
+  }
+
+  currentTable = t;
+
+  // 初始化页面结构（只创建一次）
+  if(!document.getElementById('customer-time')){
+    el.innerHTML = `
+      <h2 id="customer-name"></h2>
+      <div class="time" id="customer-time">00:00:00</div>
+      <div class="remark" id="customer-remark"></div>
+    `;
+  }
+
+  // 更新静态内容
+  document.getElementById('customer-name').innerText = t.name;
+  document.getElementById('customer-remark').innerText = t.remark || '暂无备注';
+
+  // 清除旧定时器
+  if(customerTimer) clearInterval(customerTimer);
+
+  // 启动本地实时计时器（关键）
+  customerTimer = setInterval(()=>{
+    if(!currentTable) return;
+
+    let seconds = currentTable.totalTime || 0;
+
+    if(currentTable.status === "使用中" && currentTable.startTime){
+      seconds += Math.floor((Date.now() - currentTable.startTime) / 1000);
+    }
+    else if(currentTable.status === "倒计时中" && currentTable.countdownEnd){
+      seconds = Math.max(0, Math.floor((currentTable.countdownEnd - Date.now()) / 1000));
+    }
+
+    document.getElementById('customer-time').innerText = formatTime(seconds);
+  },1000);
+});
     }
     return;
   }
@@ -208,7 +243,16 @@ function renderUI(){
   // 生成二维码
   const qrDiv=document.getElementById('qrcode');
   qrDiv.innerHTML='';
-  new QRCode(qrDiv,{text:`${window.location.href}?storeId=${storeId}&tableId=${t.id}`,width:120,height:120});
+  // ✅ 生成正确二维码（不会重复参数）
+const baseUrl = window.location.origin + window.location.pathname;
+
+qrDiv.innerHTML = ''; // 防止重复生成
+
+new QRCode(qrDiv, {
+  text: `${baseUrl}?storeId=${storeId}&tableId=${t.id}`,
+  width: 120,
+  height: 120
+});
 
   window.saveDetail = function(){
     t.name=document.getElementById('detail-name').value;
