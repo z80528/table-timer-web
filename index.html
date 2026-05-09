@@ -265,10 +265,45 @@ new QRCode(qrDiv, {
 setInterval(()=>{
   tables.forEach(t=>{
     if(t.status==='倒计时中' && t.countdownEnd){
-      if(Date.now()>=t.countdownEnd){ t.status='使用中'; t.startTime=Date.now(); t.countdownEnd=null; saveTable(t);}
+      if(Date.now()>=t.countdownEnd){
+        t.status='使用中';
+        t.startTime=Date.now();
+        t.countdownEnd=null;
+        saveTable(t);
+      }
     }
   });
-  renderUI();
+
+  // ✅ 如果在首页，正常刷新
+  if(!window.currentTableId){
+    renderUI();
+    return;
+  }
+
+  // ✅ 如果在详情页，只更新时间和状态（不重建DOM）
+  const t = tables.find(x=>x.id==window.currentTableId);
+  if(!t) return;
+
+  const timeEl = document.getElementById('detail-time');
+  const statusEl = document.getElementById('detail-status');
+
+  if(timeEl){
+    let seconds = t.totalTime || 0;
+
+    if(t.status === "使用中" && t.startTime){
+      seconds += Math.floor((Date.now() - t.startTime)/1000);
+    } 
+    else if(t.status === "倒计时中" && t.countdownEnd){
+      seconds = Math.max(0, Math.floor((t.countdownEnd - Date.now())/1000));
+    }
+
+    timeEl.innerText = formatTime(seconds);
+  }
+
+  if(statusEl){
+    statusEl.innerText = t.status;
+  }
+
 },1000);
 
 window.addTable=addTable;
