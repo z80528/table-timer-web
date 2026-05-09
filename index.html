@@ -2,7 +2,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>桌台计时系统（永不白屏稳定版）</title><style>
+<title>桌台计时系统（状态机稳定版）</title><style>
 body{margin:0;padding:20px;font-family:Arial;background:#f5f5f5;}
 .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
 button{border:none;padding:12px 16px;border-radius:12px;cursor:pointer;color:white;font-size:14px;}
@@ -25,12 +25,23 @@ input{width:100%;box-sizing:border-box;font-size:24px;border:none;background:non
 .loading{padding:40px;text-align:center;color:#666;}
 .error{padding:40px;text-align:center;color:red;}
 </style></head><body>
-<div id="app" class="loading">系统启动中...</div><script type="module">
+<div id="app"></div><script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
 
-/* ================= 永不白屏保护 ================= */
+/* ================= 状态机核心 ================= */
+const STATE = {
+  LOADING:'loading',
+  READY:'ready',
+  ERROR:'error',
+  DETAIL:'detail',
+  CUSTOMER:'customer'
+};
+
+let appState = STATE.LOADING;
+
+/* ================= 防白屏 ================= */
 window.onerror = (m)=>console.log("JS ERROR:",m);
 
 /* ================= Firebase ================= */
@@ -49,10 +60,9 @@ try{
   app = initializeApp(firebaseConfig);
   db = getDatabase(app);
 }catch(e){
-  document.getElementById('app').innerHTML='<div class="error">Firebase初始化失败</div>';
+  appState = STATE.ERROR;
 }
 
-/* ================= 参数 ================= */
 const params = new URLSearchParams(location.search);
 const storeId = params.get('storeId');
 const tableId = params.get('tableId');
@@ -61,7 +71,6 @@ const appEl = document.getElementById('app');
 
 let tables = [];
 let currentId = null;
-let loaded = false;
 
 /* ================= 工具 ================= */
 function format(sec){
@@ -85,10 +94,11 @@ function save(t){
   }catch(e){console.log(e);}
 }
 
-/* ================= 加载 ================= */
+/* ================= 数据加载 ================= */
 function load(){
   if(!storeId){
-    appEl.innerHTML='<div class="error">缺少storeId</div>';
+    appState = STATE.ERROR;
+    render();
     return;
   }
 
@@ -98,108 +108,95 @@ function load(){
     try{
       const v=s.val();
       tables=v?Object.values(v):[];
-      loaded=true;
+      appState = tableId ? STATE.CUSTOMER : STATE.READY;
       render();
     }catch(e){
-      appEl.innerHTML='<div class="error">数据解析失败</div>';
+      appState = STATE.ERROR;
+      render();
     }
-  },err=>{
-    appEl.innerHTML='<div class="error">网络错误</div>';
+  },()=>{
+    appState = STATE.ERROR;
+    render();
   });
 }
 
-/* ================= 渲染（永不白屏核心） ================= */
+/* ================= 渲染机（状态机核心） ================= */
 function render(){
 
-  if(!loaded){
-    appEl.innerHTML='<div class="loading">加载数据中...</div>';
+  /* ===== loading ===== */
+  if(appState===STATE.LOADING){
+    appEl.innerHTML='<div class="loading">系统加载中...</div>';
+    return;
+  }
+
+  /* ===== error ===== */
+  if(appState===STATE.ERROR){
+    appEl.innerHTML='<div class="error">系统异常，请刷新重试</div>';
     return;
   }
 
   /* ===== 顾客端 ===== */
-  if(tableId){
+  if(appState===STATE.CUSTOMER){
     const t=tables.find(x=>String(x.id)===String(tableId));
 
     if(!t){
-      appEl.innerHTML='<div class="error">桌台不存在或加载中</div>';
+      appEl.innerHTML='<div class="error">桌台不存在或未加载</div>';
       return;
     }
 
     appEl.innerHTML=`
-      <h2>${t.name||'未命名桌台'}</h2>
+      <h2>${t.name||'桌台'}</h2>
       <div class="time" id="ct">00:00:00</div>
       <div>${t.remark||''}</div>
-    `;
-
-    setInterval(()=>{
-      const t2=tables.find(x=>String(x.id)===String(tableId));
-      if(!t2) return;
-
-      let sec=getSec(t2);
-      if(t2.status==='倒计时中'){
-        sec=Math.max(0,Math.floor((t2.countdownEnd-Date.now())/1000));
-      }
-
-      const el=document.getElementById('ct');
-      if(el) el.innerText=format(sec);
-    },1000);
-
-    return;
-  }
-
-  /* ===== 管理端列表 ===== */
-  if(!currentId){
-
-    appEl.innerHTML=`
-      <div class="top">
-        <h2>桌台系统</h2>
-        <button class="add-btn" onclick="add()">+新增</button>
-      </div>
-
-      <div class="tables">
-        ${tables.length?tables.map(t=>`
-          <div class="card" onclick="openTable('${t.id}')">
-            <h3>${t.name||'未命名'}</h3>
-            <div class="status">${t.status||'未知'}</div>
-            <div class="time" id="t-${t.id}">00:00:00</div>
-          </div>
-        `).join(''):'<div class="loading">暂无桌台</div>'}
-      </div>
     `;
 
     return;
   }
 
   /* ===== 详情页 ===== */
-  const t=tables.find(x=>String(x.id)===String(currentId));
+  if(appState===STATE.DETAIL){
+    const t=tables.find(x=>String(x.id)===String(currentId));
 
-  if(!t){
-    appEl.innerHTML='<div class="error">加载失败，返回重试</div>';
-    return;
-  }
+    if(!t){
+      appState=STATE.READY;
+      render();
+      return;
+    }
 
-  appEl.innerHTML=`
-    <div class="card">
-      <button class="back-btn" onclick="back()">返回</button>
-
-      <input id="name" value="${t.name||''}" />
-
-      <div class="status">${t.status||''}</div>
-
-      <div class="time" id="dt">00:00:00</div>
-
-      <textarea id="remark">${t.remark||''}</textarea><div class="btns">
-    <button class="start" onclick="start('${t.id}')">开始</button>
-    <button class="pause-btn" onclick="pause('${t.id}')">暂停</button>
-    <button class="reset" onclick="reset('${t.id}')">重置</button>
+    appEl.innerHTML=`
+      <div class="card">
+        <button class="back-btn" onclick="back()">返回</button>
+        <input id="name" value="${t.name||''}" />
+        <div class="status">${t.status||''}</div>
+        <div class="time" id="dt">00:00:00</div>
+        <textarea id="remark">${t.remark||''}</textarea><div class="btns">
+      <button class="start" onclick="start('${t.id}')">开始</button>
+      <button class="pause-btn" onclick="pause('${t.id}')">暂停</button>
+      <button class="reset" onclick="reset('${t.id}')">重置</button>
+    </div>
   </div>
+`;
+return;
+
+}
+
+/* ===== 列表 ===== */ appEl.innerHTML=` <div class="top"> <h2>桌台系统</h2> <button class="add-btn" onclick="add()">+新增</button> </div>
+
+<div class="tables">
+  ${tables.length?tables.map(t=>`
+    <div class="card" onclick="openTable('${t.id}')">
+      <h3>${t.name||'桌台'}</h3>
+      <div class="status">${t.status||'未使用'}</div>
+      <div class="time" id="t-${t.id}">00:00:00</div>
+    </div>
+  `).join(''):'<div class="loading">暂无数据</div>'}
 </div>
 
 `; }
 
-/* ================= 时间刷新（不会白屏） ================= */ setInterval(()=>{ try{ tables.forEach(t=>{ const el=document.getElementById('t-'+t.id); if(el) el.innerText=format(getSec(t)); });
+/* ================= 时间刷新 ================= */ setInterval(()=>{ try{ tables.forEach(t=>{ const el=document.getElementById('t-'+t.id); if(el) el.innerText=format(getSec(t)); });
 
-if(currentId){
+if(appState===STATE.DETAIL){
   const t=tables.find(x=>String(x.id)===String(currentId));
   const el=document.getElementById('dt');
   if(t&&el) el.innerText=format(getSec(t));
@@ -209,7 +206,9 @@ if(currentId){
 
 /* ================= 操作 ================= */ window.add=()=>{ const id=Date.now().toString(); save({id,name:'桌台',status:'未使用',totalTime:0}); };
 
-window.openTable=id=>{currentId=id;render();}; window.back=()=>{currentId=null;render();};
+window.openTable=id=>{ currentId=id; appState=STATE.DETAIL; render(); };
+
+window.back=()=>{ appState=STATE.READY; currentId=null; render(); };
 
 window.start=id=>{ const t=tables.find(x=>x.id===id); if(!t)return; t.status='使用中'; t.startTime=Date.now(); save(t); };
 
@@ -217,7 +216,7 @@ window.pause=id=>{ const t=tables.find(x=>x.id===id); if(!t)return; t.totalTime=
 
 window.reset=id=>{ const t=tables.find(x=>x.id===id); if(!t)return; t.totalTime=0; t.status='未使用'; t.startTime=null; save(t); };
 
-/* ================= 启动 ================= */ load();
+/* ================= 启动 ================= */ load(); render();
 
 </script>
 </body>
