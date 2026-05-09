@@ -253,7 +253,6 @@ new QRCode(qrDiv, {
   width: 120,
   height: 120
 });
-
   window.saveDetail = function(){
     t.name=document.getElementById('detail-name').value;
     t.remark=document.getElementById('detail-remark').value;
@@ -263,50 +262,12 @@ new QRCode(qrDiv, {
 }
 
 setInterval(()=>{
-  if(isEditing) return;
   tables.forEach(t=>{
     if(t.status==='倒计时中' && t.countdownEnd){
-      if(Date.now()>=t.countdownEnd){
-        t.status='使用中';
-        t.startTime=Date.now();
-        t.countdownEnd=null;
-        saveTable(t);
-      }
+      if(Date.now()>=t.countdownEnd){ t.status='使用中'; t.startTime=Date.now(); t.countdownEnd=null; saveTable(t);}
     }
   });
-
-  let isEditing = false;
-
-document.addEventListener('focusin', (e)=>{
-  if(e.target.id === 'detail-name' || e.target.id === 'detail-remark'){
-    isEditing = true;
-  }
-});
-
-document.addEventListener('focusout', ()=>{
-  isEditing = false;
-});
-  
-  // ✅ 只更新详情页时间（不重绘页面）
-  if(window.currentTableId){
-    const t = tables.find(x=>x.id==window.currentTableId);
-    if(!t) return;
-
-    const timeEl = document.getElementById('detail-time');
-    if(!timeEl) return;
-
-    let seconds = t.totalTime || 0;
-
-    if(t.status==="使用中" && t.startTime){
-      seconds += Math.floor((Date.now()-t.startTime)/1000);
-    }
-    else if(t.status==="倒计时中" && t.countdownEnd){
-      seconds = Math.max(0, Math.floor((t.countdownEnd-Date.now())/1000));
-    }
-
-    timeEl.innerText = formatTime(seconds);
-  }
-
+  renderUI();
 },1000);
 
 window.addTable=addTable;
