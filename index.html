@@ -263,6 +263,7 @@ new QRCode(qrDiv, {
 }
 
 setInterval(()=>{
+  if(isEditing) return;
   tables.forEach(t=>{
     if(t.status==='倒计时中' && t.countdownEnd){
       if(Date.now()>=t.countdownEnd){
